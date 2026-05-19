@@ -28,5 +28,5 @@ dist-ssr
 .env.*
 .env.local
 
-# Supabase local metadata
-.supabase
+# Local Supabase CLI metadata
+.supabase/
