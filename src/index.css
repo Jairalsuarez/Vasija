@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-purple-50: #f3eeff;
+  --color-purple-100: #ede6ff;
+  --color-purple-200: #d9ccff;
+  --color-purple-300: #b999ff;
+  --color-purple-400: #a366ff;
+  --color-purple-500: #863bff;
+  --color-purple-600: #7e14ff;
+  --color-purple-700: #5c0dbf;
+  --color-purple-800: #3f0991;
+  --color-purple-900: #2a0663;
+  --color-purple-950: #1a033d;
+
+  --color-blue-50: #EFF6FF;
+  --color-blue-100: #DBEAFE;
+  --color-blue-200: #BFDBFE;
+  --color-blue-500: #3B82F6;
+  --color-blue-600: #2563EB;
+  --color-blue-700: #1D4ED8;
+  --color-blue-900: #1E3A5F;
+  --color-blue-950: #17275A;
+
+  --color-pink-50: #FDF2F8;
+  --color-pink-100: #FCE7F3;
+  --color-pink-200: #FBCFE8;
+  --color-pink-500: #EC4899;
+  --color-pink-600: #DB2777;
+  --color-pink-700: #BE185D;
+  --color-pink-900: #831843;
+  --color-pink-950: #500724;
+}
+
+body, #root {
+  margin: 0;
+  min-height: 100svh;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: #FFFFFF;
+  color: #111827;
+}
+
+.dark body, body.dark, .dark #root {
+  background-color: #0F172A;
+  color: #F1F5F9;
+}
