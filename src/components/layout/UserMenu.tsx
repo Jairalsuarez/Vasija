@@ -7,17 +7,19 @@ import {
   LogOut,
 } from 'lucide-react';
 import { signOut } from '../../services/authService';
-import { useProfileStore, useUIStore, useCoupleStore } from '../../store';
+import { useProfileStore, useUIStore, useCoupleStore, useFinanceStore } from '../../store';
 
 export function UserMenu() {
   const { userMenuOpen, closeUserMenu } = useUIStore();
   const { profile, logout } = useProfileStore();
   const { resetCouple } = useCoupleStore();
+  const { resetFinance } = useFinanceStore();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     closeUserMenu();
     resetCouple();
+    resetFinance();
     logout();
     navigate('/', { replace: true });
     const { error } = await signOut();

@@ -59,6 +59,24 @@ export const useProfileStore = create<ProfileState>()(
         sessionReady: true,
       }),
     }),
-    { name: 'auth-store' },
+    {
+      name: 'auth-store',
+      version: 2,
+      partialize: (state) => ({
+        profile: state.profile,
+        isOnboarded: state.isOnboarded,
+        hasUsedBefore: state.hasUsedBefore,
+      }),
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<ProfileState>;
+        return {
+          profile: state.profile || null,
+          isAuthenticated: false,
+          isOnboarded: state.isOnboarded || false,
+          hasUsedBefore: state.hasUsedBefore || false,
+          sessionReady: false,
+        };
+      },
+    },
   ),
 );

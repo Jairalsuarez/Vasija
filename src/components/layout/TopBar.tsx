@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Menu, Sun, Moon, User, Users, Heart, Bell } from 'lucide-react';
+import { AnimatePresence, motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
+import { Menu, Sun, Moon, User, Users, Heart, Bell, X, Info, CheckCircle2, AlertTriangle, WalletCards } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useProfileStore, useUIStore, useCoupleStore } from '../../store';
 import { Switch } from '../ui/Switch';
@@ -38,6 +39,38 @@ export function TopBar() {
   const { viewMode, toggleViewMode, isLinked, setViewMode } = useCoupleStore();
   const appTheme = useAppTheme();
 
+  const playMoneySound = (kind: 'income' | 'expense') => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = new AudioContextCtor();
+      const now = ctx.currentTime;
+      const tones = kind === 'income' ? [880, 1174, 1568] : [392, 330, 262];
+      [0, 0.055, 0.11].forEach((offset, index) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = kind === 'income' ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(tones[index], now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(kind === 'income' ? 0.05 : 0.032, now + offset + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.2);
+      });
+      window.setTimeout(() => void ctx.close(), 500);
+    } catch {
+      // Browser may block audio without recent user gesture.
+    }
+  };
+
+  useEffect(() => {
+    if (!toastNotification) return;
+    const timer = window.setTimeout(() => setToastNotification(null), 5200);
+    return () => window.clearTimeout(timer);
+  }, [toastNotification]);
+
   useEffect(() => {
     if (!profile?.id) return;
     let cancelled = false;
@@ -49,7 +82,6 @@ export function TopBar() {
 
     const showBrowserNotification = async (notification: AppNotification) => {
       setToastNotification(notification);
-      window.setTimeout(() => setToastNotification(null), 4500);
       const movementType = typeof notification.metadata?.type === 'string' ? notification.metadata.type : '';
       if (notification.type === 'success' || movementType === 'income' || notification.title.toLowerCase().includes('ingreso')) {
         playMoneySound('income');
@@ -162,7 +194,6 @@ export function TopBar() {
       created_at: new Date().toISOString(),
     };
     setToastNotification(testNotification);
-    window.setTimeout(() => setToastNotification(null), 4500);
 
     if (!('Notification' in window)) return;
     let permission = Notification.permission;
@@ -227,32 +258,6 @@ export function TopBar() {
     if (route.includes('scope=personal')) setViewMode('personal');
     setNotificationsOpen(false);
     navigate(route);
-  };
-
-  const playMoneySound = (kind: 'income' | 'expense') => {
-    try {
-      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) return;
-      const ctx = new AudioContextCtor();
-      const now = ctx.currentTime;
-      const tones = kind === 'income' ? [880, 1174, 1568] : [392, 330, 262];
-      [0, 0.055, 0.11].forEach((offset, index) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = kind === 'income' ? 'sine' : 'triangle';
-        osc.frequency.setValueAtTime(tones[index], now + offset);
-        gain.gain.setValueAtTime(0.0001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(kind === 'income' ? 0.05 : 0.032, now + offset + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.18);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.2);
-      });
-      window.setTimeout(() => void ctx.close(), 500);
-    } catch {
-      // Browser may block audio without recent user gesture.
-    }
   };
 
   const coupleNotice = showCoupleNotice ? (
@@ -415,15 +420,138 @@ export function TopBar() {
           onClick={() => setNotificationsOpen(false)}
         />
       )}
-      {toastNotification && (
-        <div className="fixed inset-x-3 bottom-4 z-[1200] md:left-1/2 md:right-auto md:w-[420px] md:-translate-x-1/2">
-          <div className="relative overflow-visible rounded-[20px] border border-[var(--theme-card-border)] bg-white/95 px-4 py-3 shadow-2xl shadow-black/15 backdrop-blur-xl dark:bg-[var(--theme-card-bg)]/95">
-            <p className="line-clamp-1 text-sm font-extrabold text-gray-950 dark:text-white">{toastNotification.title}</p>
-            <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{toastNotification.body}</p>
-          </div>
-        </div>
-      )}
+      <AppToast notification={toastNotification} onDismiss={() => setToastNotification(null)} />
       {coupleNotice ? createPortal(coupleNotice, document.body) : null}
     </>
   );
+}
+
+type ToastTone = {
+  accent: string;
+  aura: string;
+  iconBg: string;
+  icon: typeof Info;
+  label: string;
+};
+
+function AppToast({ notification, onDismiss }: { notification: AppNotification | null; onDismiss: () => void }) {
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-260, 0, 260], [-5, 0, 5]);
+  const opacity = useTransform(x, [-260, -150, 0, 150, 260], [0, 0.75, 1, 0.75, 0]);
+  const movementType = typeof notification?.metadata?.type === 'string' ? notification.metadata.type : '';
+  const tone = useMemo(() => getToastTone(notification, movementType), [notification, movementType]);
+  const Icon = tone.icon;
+
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (Math.abs(info.offset.x) > 120 || Math.abs(info.velocity.x) > 720) {
+      onDismiss();
+    }
+  };
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-x-3 bottom-4 z-[1200] flex justify-center sm:bottom-6">
+      <AnimatePresence>
+        {notification ? (
+          <motion.div
+            key={notification.id}
+            className="pointer-events-auto w-full max-w-[430px] touch-pan-y"
+            initial={{ y: 36, opacity: 0, scale: 0.94, filter: 'blur(8px)' }}
+            animate={{ y: 0, opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            exit={{ y: 28, opacity: 0, scale: 0.96, filter: 'blur(8px)' }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.8 }}
+            style={{ x, rotate, opacity }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.32}
+            onDragEnd={handleDragEnd}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-slate-50/95 p-1 shadow-[0_22px_60px_rgba(15,23,42,0.20)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/90">
+              <div
+                className="absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl"
+                style={{ background: tone.aura }}
+              />
+              <div className="relative flex items-start gap-3 rounded-[20px] bg-white/80 px-3.5 py-3 dark:bg-[var(--theme-card-bg)]/82">
+                <div className="relative mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg" style={{ background: tone.iconBg }}>
+                  <Icon className="h-5 w-5" />
+                  <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-[var(--theme-card-bg)]" style={{ background: tone.accent }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white" style={{ background: tone.accent }}>
+                      {tone.label}
+                    </span>
+                    <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
+                  </div>
+                  <p className="line-clamp-1 text-sm font-black text-slate-950 dark:text-white">{notification.title}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-slate-500 dark:text-[var(--theme-text-secondary)]">
+                    {notification.body}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onDismiss}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 active:scale-90 dark:hover:bg-white/10 dark:hover:text-white"
+                  aria-label="Quitar notificacion"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <motion.div
+                className="h-1 origin-left rounded-full"
+                style={{ background: tone.iconBg }}
+                initial={{ scaleX: 1 }}
+                animate={{ scaleX: 0 }}
+                transition={{ duration: 5.2, ease: 'linear' }}
+              />
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>,
+    document.body,
+  );
+}
+
+function getToastTone(notification: AppNotification | null, movementType: string): ToastTone {
+  const lowerTitle = notification?.title.toLowerCase() || '';
+
+  if (notification?.type === 'warning') {
+    return {
+      accent: '#d97706',
+      aura: 'rgba(245, 158, 11, 0.28)',
+      iconBg: 'linear-gradient(135deg, #f59e0b, #b45309)',
+      icon: AlertTriangle,
+      label: 'Aviso',
+    };
+  }
+
+  if (notification?.type === 'success' || movementType === 'income' || lowerTitle.includes('ingreso')) {
+    return {
+      accent: '#059669',
+      aura: 'rgba(16, 185, 129, 0.24)',
+      iconBg: 'linear-gradient(135deg, #10b981, #047857)',
+      icon: CheckCircle2,
+      label: 'Listo',
+    };
+  }
+
+  if (movementType === 'expense' || lowerTitle.includes('gasto')) {
+    return {
+      accent: '#e35695',
+      aura: 'rgba(227, 86, 149, 0.24)',
+      iconBg: 'linear-gradient(135deg, #e35695, #be185d)',
+      icon: WalletCards,
+      label: 'Movimiento',
+    };
+  }
+
+  return {
+    accent: '#0b59b3',
+    aura: 'rgba(11, 89, 179, 0.22)',
+    iconBg: 'linear-gradient(135deg, #0b59b3, #2563eb)',
+    icon: Info,
+    label: 'Nuevo',
+  };
 }

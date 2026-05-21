@@ -17,9 +17,8 @@ import { useProfileStore, useCoupleStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import { getBalance } from '../services/movementService';
-import { getJointAccount, updateJointAccountTheme } from '../services/jointAccountService';
+import { getJointAccount } from '../services/jointAccountService';
 import { proposeNameChange, respondNameChange, getPendingNameChange } from '../services/nameChangeService';
-import { getTheme, JOINT_ACCOUNT_THEMES } from '../config/themes';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { formatCurrency } from '../lib/formatters';
 import type { Gender } from '../types';
@@ -59,14 +58,11 @@ export function AccountSettingsPage() {
   } | null>(null);
   const [newJointName, setNewJointName] = useState('');
   const [savingJoint, setSavingJoint] = useState(false);
-  const [savingJointTheme, setSavingJointTheme] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const myId = profile?.id;
   const isMyRequest = pendingRequest?.requester_id === myId;
-  const liveThemeId = jointAcc?.theme;
-  const jointTheme = getTheme(liveThemeId);
   const nameWaiting = activeMode === 'joint' && !!pendingRequest && isMyRequest;
   const partnerLabel = partnerAlias || partnerName || 'Pareja';
 
@@ -84,9 +80,9 @@ export function AccountSettingsPage() {
         kicker: `${profile?.name || 'Tu'} y ${partnerLabel}`,
         name: liveJointName,
         balance: jointAcc.balance,
-        cardClass: `${jointTheme.bg} ${jointTheme.text}`,
-        cardStyle: undefined,
-        accentClass: jointTheme.accent,
+        cardClass: 'text-white',
+        cardStyle: { background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` },
+        accentClass: 'bg-white/15',
       };
     }
 
@@ -99,7 +95,7 @@ export function AccountSettingsPage() {
       cardStyle: { background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` },
       accentClass: 'bg-white/15',
     };
-  }, [activeEditor, activeMode, accountName, appTheme.primary, appTheme.secondary, isMyRequest, jointAcc, jointTheme, newJointName, partnerLabel, pendingRequest, personalBalance, profile]);
+  }, [activeEditor, activeMode, accountName, appTheme.primary, appTheme.secondary, isMyRequest, jointAcc, newJointName, partnerLabel, pendingRequest, personalBalance, profile]);
 
   const loadJoint = async () => {
     if (!profile || !isLinked) return;
@@ -199,17 +195,6 @@ export function AccountSettingsPage() {
       setError(result.error || 'No se pudo responder.');
     }
     setSavingJoint(false);
-  };
-
-  const handleJointTheme = async (themeId: string) => {
-    if (!jointAcc) return;
-    setSavingJointTheme(true);
-    setError('');
-    const result = await updateJointAccountTheme(jointAcc.id, themeId);
-    if (!result.success) setError(result.error || 'No se pudo cambiar el color.');
-    await loadJoint();
-    if (result.success) setActiveEditor(null);
-    setSavingJointTheme(false);
   };
 
   const openNameEditor = () => {
@@ -342,22 +327,23 @@ export function AccountSettingsPage() {
                 <Edit3 className="h-4 w-4" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setActiveEditor(activeEditor === 'color' ? null : 'color')}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
-              aria-label="Editar color"
-            >
-              <Palette className="h-5 w-5" />
-            </button>
+            {activeMode === 'personal' && (
+              <button
+                type="button"
+                onClick={() => setActiveEditor(activeEditor === 'color' ? null : 'color')}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
+                aria-label="Editar color"
+              >
+                <Palette className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
       </section>
 
       {activeEditor === 'color' && (
         <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-[var(--theme-card-bg)]">
-          {activeMode === 'personal'
-            ? personalThemeOptions.map((option) => {
+          {personalThemeOptions.map((option) => {
                 const active = profile?.gender === option.gender;
                 return (
                   <button
@@ -372,24 +358,6 @@ export function AccountSettingsPage() {
                   >
                     <span className="block h-7 w-7 rounded-full" style={{ backgroundColor: option.color }} />
                   </button>
-                );
-              })
-            : JOINT_ACCOUNT_THEMES.map((theme) => {
-                const active = liveThemeId === theme.id;
-                return (
-                  <div key={theme.id} className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={savingJointTheme}
-                      onClick={() => handleJointTheme(theme.id)}
-                      className={`flex h-11 min-w-11 items-center justify-center rounded-full border transition-all ${
-                        active ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)]' : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950'
-                      } disabled:opacity-80`}
-                      aria-label={theme.label}
-                    >
-                      <span className={`block h-7 w-7 rounded-full ${theme.bg}`} />
-                    </button>
-                  </div>
                 );
               })}
         </div>

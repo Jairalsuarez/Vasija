@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { User, Users, Send, TrendingUp, TrendingDown, HeartHandshake, Percent } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Repeat2, User, Users, HeartHandshake, Percent } from 'lucide-react';
 import { useProfileStore, useFinanceStore, useCoupleStore, useUIStore } from '../store';
 import { formatCurrency } from '../lib/formatters';
 import { getBalance, getMovements, createMovement, completeFastOfferings } from '../services/movementService';
 import { getJointAccount, transferToJoint, transferToPartner } from '../services/jointAccountService';
-import { getTheme } from '../config/themes';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { getPendingTithes, payTithe as payTitheService, addManualTithe } from '../services/titheService';
 import { useNavigate } from 'react-router-dom';
@@ -18,14 +17,22 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 export function DashboardPage() {
   const { profile } = useProfileStore();
   const { isLinked, partnerAlias, viewMode, setLinked, setPartner, resetCouple } = useCoupleStore();
-  const { balance, setBalance, setMovements, movements, setTitheBalance, titheBalance } = useFinanceStore();
+  const {
+    balance,
+    jointBalance: cachedJointBalance,
+    setBalance,
+    setJointBalance: setCachedJointBalance,
+    setMovements,
+    movements,
+    setTitheBalance,
+    titheBalance,
+  } = useFinanceStore();
   const { autoTithe, setAutoTithe } = useUIStore();
   const navigate = useNavigate();
   const appTheme = useAppTheme();
 
-  const [jointBalance, setJointBalance] = useState(0);
+  const [jointBalance, setJointBalance] = useState(cachedJointBalance);
   const [jointAccountName, setJointAccountName] = useState('Nuestra cuenta');
-  const [jointTheme, setJointTheme] = useState('default');
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferTarget, setTransferTarget] = useState<'joint' | 'partner'>('joint');
   const [transferAmount, setTransferAmount] = useState('');
@@ -64,8 +71,15 @@ export function DashboardPage() {
   const previousAccountKeyRef = useRef<string | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const soundTimerRef = useRef<number | null>(null);
+  const loadRequestRef = useRef(0);
   const [balancesReady, setBalancesReady] = useState(false);
-  const [displayedBalance, setDisplayedBalance] = useState(0);
+  const [displayedBalance, setDisplayedBalance] = useState<number | null>(null);
+  const [quickActionPressed, setQuickActionPressed] = useState<'income' | 'transfer' | 'expense' | null>(null);
+
+  const profileId = profile?.id;
+  const profilePartnerId = profile?.partner_id;
+  const profilePartnerAlias = profile?.partner_alias;
+  const hasFinanceSnapshot = movements.length > 0 || balance !== 0 || cachedJointBalance !== 0 || titheBalance !== 0;
 
   const fastOfferingBalance = movements
     .filter((m) => m.category === 'Ofrenda de Ayuno' && !m.is_paid)
@@ -74,10 +88,52 @@ export function DashboardPage() {
   const displayTithe = titheBalance;
   const activeAccountBalance = isCoupleMode && isLinked ? jointBalance : balance;
   const activeAccountKey = isCoupleMode && isLinked ? 'joint' : 'personal';
+  const visibleBalance = displayedBalance ?? activeAccountBalance;
 
   const goToMoneyPage = (path: '/income' | '/expense') => {
     sessionStorage.setItem('vasija:balance-start', String(activeAccountBalance));
     navigate(path);
+  };
+
+  const playQuickAction = (action: 'income' | 'transfer' | 'expense', callback: () => void) => {
+    setQuickActionPressed(action);
+    window.setTimeout(() => {
+      callback();
+      setQuickActionPressed(null);
+    }, 180);
+  };
+
+  const playBalanceSound = (kind: 'income' | 'expense') => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = new AudioContextCtor();
+      const now = ctx.currentTime;
+      const duration = 0.85;
+      const steps = 10;
+      const startTone = kind === 'income' ? 520 : 420;
+      const endTone = kind === 'income' ? 1480 : 180;
+      for (let index = 0; index < steps; index += 1) {
+        const progress = index / Math.max(1, steps - 1);
+        const offset = progress * duration;
+        const tone = startTone + (endTone - startTone) * progress;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = kind === 'income' ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(tone, now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(kind === 'income' ? 0.035 : 0.022, now + offset + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.11);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.13);
+      }
+      if (soundTimerRef.current) window.clearTimeout(soundTimerRef.current);
+      soundTimerRef.current = window.setTimeout(() => void ctx.close(), 1200);
+    } catch {
+      // Audio can be blocked without recent user gesture.
+    }
   };
 
   const animateDisplayedBalance = useCallback((start: number, end: number, kind?: 'income' | 'expense') => {
@@ -129,7 +185,10 @@ export function DashboardPage() {
       }
       return;
     }
-    if (activeAccountBalance === previousBalanceRef.current) return;
+    if (activeAccountBalance === previousBalanceRef.current) {
+      if (displayedBalance === null) setDisplayedBalance(activeAccountBalance);
+      return;
+    }
     const start = previousBalanceRef.current;
     const end = activeAccountBalance;
     const kind = end > start ? 'income' : 'expense';
@@ -141,65 +200,41 @@ export function DashboardPage() {
     };
   }, [activeAccountBalance, activeAccountKey, animateDisplayedBalance, balancesReady, displayedBalance]);
 
-  function playBalanceSound(kind: 'income' | 'expense') {
-    try {
-      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) return;
-      const ctx = new AudioContextCtor();
-      const now = ctx.currentTime;
-      const duration = 0.85;
-      const steps = 10;
-      const startTone = kind === 'income' ? 520 : 420;
-      const endTone = kind === 'income' ? 1480 : 180;
-      for (let index = 0; index < steps; index += 1) {
-        const progress = index / Math.max(1, steps - 1);
-        const offset = progress * duration;
-        const tone = startTone + (endTone - startTone) * progress;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = kind === 'income' ? 'sine' : 'triangle';
-        osc.frequency.setValueAtTime(tone, now + offset);
-        gain.gain.setValueAtTime(0.0001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(kind === 'income' ? 0.035 : 0.022, now + offset + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.11);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.13);
-      }
-      if (soundTimerRef.current) window.clearTimeout(soundTimerRef.current);
-      soundTimerRef.current = window.setTimeout(() => void ctx.close(), 1200);
-    } catch {
-      // Audio can be blocked without recent user gesture.
-    }
-  }
-
   const loadData = useCallback(async () => {
-    if (!profile) return;
-    const bal = await getBalance(profile.id);
+    if (!profileId) return;
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+    if (!hasFinanceSnapshot) setBalancesReady(false);
+
+    const [bal, movs, jointAcc, pending, latestProfile] = await Promise.all([
+      getBalance(profileId),
+      getMovements(profileId, isCoupleMode, profilePartnerId),
+      isLinked ? getJointAccount(profileId) : Promise.resolve(null),
+      getPendingTithes(profileId),
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', profileId)
+        .maybeSingle()
+        .then(({ data }) => data),
+    ]);
+
+    if (requestId !== loadRequestRef.current) return;
+
     setBalance(bal);
-    const movs = await getMovements(profile.id, isCoupleMode, profile.partner_id);
     setMovements(movs);
-    if (isLinked) {
-      const acc = await getJointAccount(profile.id);
-      if (acc) {
-        setJointBalance(acc.balance);
-        setJointAccountName(acc.account_name || 'Nuestra cuenta');
-        setJointTheme(acc.theme || 'default');
-      }
+
+    if (jointAcc) {
+      setJointBalance(jointAcc.balance);
+      setCachedJointBalance(jointAcc.balance);
+      setJointAccountName(jointAcc.account_name || 'Nuestra cuenta');
     }
-    const pending = await getPendingTithes(profile.id);
+
     setPendingTithes(pending);
     const totalTithe = pending.reduce((sum, t) => sum + t.amount, 0);
     setTitheBalance(totalTithe);
 
     // Dynamic sync of couple connection status and partner profile
-    const { data: latestProfile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', profile.id)
-      .maybeSingle();
-
     if (latestProfile) {
       if (latestProfile.partner_id) {
         console.log("[DEBUG DASH] Loading partner info for ID:", latestProfile.partner_id);
@@ -212,14 +247,15 @@ export function DashboardPage() {
           console.log("[DEBUG DASH] Partner data loaded successfully:", rawPartner);
         }
         const partnerData = rawPartner as { name: string; avatar_url: string | null } | null;
+        if (requestId !== loadRequestRef.current) return;
         setLinked(true);
-        setPartner(partnerData?.name || 'Pareja', partnerData?.avatar_url || null, profile?.partner_alias || null);
+        setPartner(partnerData?.name || 'Pareja', partnerData?.avatar_url || null, profilePartnerAlias || null);
       } else {
         resetCouple();
       }
     }
     setBalancesReady(true);
-  }, [profile?.id, profile?.partner_alias, setBalance, setMovements, isLinked, isCoupleMode, setTitheBalance, setLinked, setPartner, resetCouple]);
+  }, [profileId, profilePartnerId, profilePartnerAlias, setBalance, setCachedJointBalance, setMovements, isLinked, isCoupleMode, setTitheBalance, setLinked, setPartner, resetCouple, hasFinanceSnapshot]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -412,6 +448,12 @@ export function DashboardPage() {
     setCompletingOfferings(false);
   };
 
+  const quickActionMotion = {
+    initial: { scale: 1, opacity: 1, boxShadow: '0 8px 20px rgba(0,0,0,0.12)' },
+    whileTap: { scale: 0.96, opacity: 0.98, boxShadow: '0 4px 12px rgba(0,0,0,0.14)' },
+    transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
+  } as const;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -420,69 +462,80 @@ export function DashboardPage() {
     >
       {/* Quick actions */}
       <div className={`grid gap-3 ${isLinked ? 'grid-cols-3' : 'grid-cols-2'}`}>
-        <button
-          onClick={() => goToMoneyPage('/income')}
-          className="bg-white dark:bg-gray-900 rounded-2xl p-3 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center gap-2 hover:border-green-300 active:scale-[0.98] transition-all"
+        <motion.button
+          {...quickActionMotion}
+          animate={quickActionPressed === 'income'
+            ? { scale: [1, 0.96, 1], opacity: [1, 0.98, 1], boxShadow: ['0 8px 20px rgba(0,0,0,0.12)', '0 4px 12px rgba(0,0,0,0.14)', '0 8px 20px rgba(0,0,0,0.12)'] }
+            : { scale: 1, opacity: 1, boxShadow: '0 8px 20px rgba(0,0,0,0.12)' }}
+          onClick={() => playQuickAction('income', () => goToMoneyPage('/income'))}
+          className={`quick-action-button quick-action-button--income min-h-[118px] rounded-2xl border border-gray-200 bg-white px-2.5 py-4 dark:border-gray-800 dark:bg-gray-900 flex flex-col items-center justify-center gap-3 transition-colors hover:border-[var(--quick-color)] ${quickActionPressed === 'income' ? 'quick-action-button--pressed' : ''}`}
+          aria-label="Ingresar dinero"
         >
-          <div className="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-950 flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-green-600" />
+          <div className="quick-action-button__icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
+            <ArrowDownToLine className="h-8 w-8" />
           </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Ingreso</p>
-            <p className="text-[11px] text-gray-400">Agregar</p>
-          </div>
-        </button>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Ingresar</p>
+        </motion.button>
         {isLinked && (
-          <button
-            onClick={() => setTransferOpen(true)}
-            className="bg-white dark:bg-gray-900 rounded-2xl p-3 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center gap-2 hover:border-[var(--theme-primary)] active:scale-[0.98] transition-all"
+          <motion.button
+            {...quickActionMotion}
+            animate={quickActionPressed === 'transfer'
+              ? { scale: [1, 0.96, 1], opacity: [1, 0.98, 1], boxShadow: ['0 8px 20px rgba(0,0,0,0.12)', '0 4px 12px rgba(0,0,0,0.14)', '0 8px 20px rgba(0,0,0,0.12)'] }
+              : { scale: 1, opacity: 1, boxShadow: '0 8px 20px rgba(0,0,0,0.12)' }}
+            onClick={() => playQuickAction('transfer', () => setTransferOpen(true))}
+            className={`quick-action-button quick-action-button--transfer min-h-[118px] rounded-2xl border border-gray-200 bg-white px-2.5 py-4 dark:border-gray-800 dark:bg-gray-900 flex flex-col items-center justify-center gap-3 transition-colors hover:border-[var(--quick-color)] ${quickActionPressed === 'transfer' ? 'quick-action-button--pressed' : ''}`}
+            aria-label="Transferir dinero"
           >
-            <div className="w-10 h-10 rounded-xl bg-[var(--theme-primary-light)] flex items-center justify-center">
-              <Send className="w-5 h-5 text-[var(--theme-primary)]" />
+            <div className="quick-action-button__icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
+              <Repeat2 className="h-8 w-8" />
             </div>
-            <div className="text-center">
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Transferir</p>
-              <p className="text-[11px] text-gray-400">{formatCurrency(balance)}</p>
-            </div>
-          </button>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Transferir</p>
+          </motion.button>
         )}
-        <button
-          onClick={() => goToMoneyPage('/expense')}
-          className="bg-white dark:bg-gray-900 rounded-2xl p-3 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center gap-2 hover:border-red-300 active:scale-[0.98] transition-all"
+        <motion.button
+          {...quickActionMotion}
+          animate={quickActionPressed === 'expense'
+            ? { scale: [1, 0.96, 1], opacity: [1, 0.98, 1], boxShadow: ['0 8px 20px rgba(0,0,0,0.12)', '0 4px 12px rgba(0,0,0,0.14)', '0 8px 20px rgba(0,0,0,0.12)'] }
+            : { scale: 1, opacity: 1, boxShadow: '0 8px 20px rgba(0,0,0,0.12)' }}
+          onClick={() => playQuickAction('expense', () => goToMoneyPage('/expense'))}
+          className={`quick-action-button quick-action-button--expense min-h-[118px] rounded-2xl border border-gray-200 bg-white px-2.5 py-4 dark:border-gray-800 dark:bg-gray-900 flex flex-col items-center justify-center gap-3 transition-colors hover:border-[var(--quick-color)] ${quickActionPressed === 'expense' ? 'quick-action-button--pressed' : ''}`}
+          aria-label="Gastar dinero"
         >
-          <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950 flex items-center justify-center">
-            <TrendingDown className="w-5 h-5 text-red-600" />
+          <div className="quick-action-button__icon flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl">
+            <ArrowUpFromLine className="h-8 w-8" />
           </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Gasto</p>
-            <p className="text-[11px] text-gray-400">Quitar</p>
-          </div>
-        </button>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Gastar</p>
+        </motion.button>
       </div>
 
       {/* Unified account card */}
       {(() => {
         const isJoint = isCoupleMode && isLinked;
-        const t = getTheme(isJoint ? jointTheme : undefined);
         const accName = isJoint ? jointAccountName : (profile?.account_name || 'Mi cuenta');
         return (
           <motion.div
             onClick={() => navigate(isJoint ? '/accounts?type=joint' : '/accounts?type=personal')}
             whileTap={{ scale: 0.98 }}
-            className={`${isJoint ? t.bg : ''} rounded-2xl p-6 text-white relative overflow-hidden cursor-pointer shadow-lg shadow-black/5 dark:shadow-black/30`}
-            style={!isJoint ? { background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` } : undefined}
+            className="rounded-2xl p-6 text-white relative overflow-hidden cursor-pointer shadow-lg shadow-black/5 dark:shadow-black/30"
+            style={{ background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` }}
           >
-            <div className={`absolute top-0 right-0 w-32 h-32 ${isJoint ? t.accent : 'bg-white/15'} rounded-full -translate-y-1/2 translate-x-1/2`} />
-            <div className={`absolute bottom-0 left-0 w-24 h-24 ${isJoint ? t.accent : 'bg-white/10'} rounded-full translate-y-1/2 -translate-x-1/2`} />
+            <div className="absolute top-0 right-0 w-32 h-32 rounded-full -translate-y-1/2 translate-x-1/2 bg-white/15" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full translate-y-1/2 -translate-x-1/2 bg-white/10" />
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-2 mb-2">
                 {isJoint ? <Users className="w-5 h-5 opacity-80" /> : <User className="w-5 h-5 opacity-80" />}
                 <p className="opacity-80 text-sm font-medium">{accName}</p>
               </div>
             </div>
-            <h1 className="text-3xl font-bold mt-1 relative z-10">
-              {formatCurrency(displayedBalance)}
-            </h1>
+            {balancesReady || hasFinanceSnapshot ? (
+              <h1 className="text-3xl font-bold mt-1 relative z-10">
+                {formatCurrency(visibleBalance)}
+              </h1>
+            ) : (
+              <div className="relative z-10 mt-3 h-9 w-44 overflow-hidden rounded-xl bg-white/20">
+                <div className="h-full w-16 animate-pulse bg-white/25" />
+              </div>
+            )}
           </motion.div>
         );
       })()}
@@ -520,7 +573,7 @@ export function DashboardPage() {
             >
               <p className="text-[11px] font-semibold text-[var(--theme-primary)]">Diezmo</p>
               <p className={`text-base font-bold mt-0.5 ${titheBalance > 0 ? 'text-[var(--theme-primary)]' : 'text-gray-900 dark:text-white'}`}>
-                {formatCurrency(displayTithe)}
+                {balancesReady || hasFinanceSnapshot ? formatCurrency(displayTithe) : 'Cargando...'}
               </p>
             </motion.div>
 
@@ -536,7 +589,7 @@ export function DashboardPage() {
             >
               <p className="text-[11px] font-semibold text-[var(--theme-secondary)]">Ofrendas</p>
               <p className={`text-base font-bold mt-0.5 ${fastOfferingBalance > 0 ? 'text-[var(--theme-secondary)]' : 'text-gray-900 dark:text-white'}`}>
-                {formatCurrency(fastOfferingBalance)}
+                {balancesReady || hasFinanceSnapshot ? formatCurrency(fastOfferingBalance) : 'Cargando...'}
               </p>
             </motion.div>
           </div>
@@ -595,7 +648,7 @@ export function DashboardPage() {
               <div className="flex gap-3">
                 <Button variant="secondary" className="flex-1" onClick={() => { setQuickOpen(null); setQuickAmount(''); setQuickDesc(''); }}>Cancelar</Button>
                 <Button className="flex-1" onClick={() => handleQuickSubmit()} loading={quickLoading} disabled={!quickAmount || parseFloat(quickAmount) <= 0}>
-                  {quickOpen === 'income' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                  {quickOpen === 'income' ? <ArrowDownToLine className="w-4 h-4" /> : <ArrowUpFromLine className="w-4 h-4" />}
                   {quickOpen === 'income' ? 'Agregar' : 'Registrar'}
                 </Button>
               </div>
@@ -664,7 +717,7 @@ export function DashboardPage() {
             <div className="flex gap-3">
               <Button variant="secondary" className="flex-1" onClick={() => { setTransferOpen(false); setTransferTarget('joint'); }}>Cancelar</Button>
               <Button className="flex-1" onClick={handleTransfer} loading={transferring} disabled={!transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > balance}>
-                <Send className="w-4 h-4" /> Enviar
+                <ArrowLeftRight className="w-4 h-4" /> Enviar
               </Button>
             </div>
           </motion.div>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Bell, Moon, Sun, Monitor, LogOut, Church, Edit3 } from 'lucide-react';
-import { useProfileStore, useUIStore, useCoupleStore } from '../store';
+import { useProfileStore, useUIStore, useCoupleStore, useFinanceStore } from '../store';
 import { Switch } from '../components/ui/Switch';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -13,6 +13,7 @@ import type { Gender } from '../types';
 export function SettingsPage() {
   const { profile, logout, updateProfile } = useProfileStore();
   const { resetCouple } = useCoupleStore();
+  const { resetFinance } = useFinanceStore();
   const { theme, setTheme, autoTithe, setAutoTithe } = useUIStore();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState(true);
@@ -75,6 +76,7 @@ export function SettingsPage() {
   const handleLogout = async () => {
     setLoggingOut(true);
     resetCouple();
+    resetFinance();
     logout();
     navigate('/', { replace: true });
     const { error } = await signOut();

@@ -106,8 +106,8 @@ export function getAppThemeCSS(themeId: string | null | undefined, isCouple: boo
     '--theme-hover': '#f8fafc',
     '--theme-toggle-bg': s,
     '--theme-toggle-icon': '#ffffff',
-    '--theme-danger': '#ef4444',
-    '--theme-success': '#22c55e',
+    '--theme-danger': isCouple ? s : '#ef4444',
+    '--theme-success': isCouple ? p : '#22c55e',
     '--theme-warning': '#f59e0b',
   };
 
@@ -153,8 +153,8 @@ export function getAppThemeDarkCSS(themeId: string | null | undefined, isCouple:
     '--theme-hover': hexToRgba(primaryBright, 0.1),
     '--theme-toggle-bg': secondaryBright,
     '--theme-toggle-icon': '#ffffff',
-    '--theme-danger': '#f87171',
-    '--theme-success': '#34d399',
+    '--theme-danger': isCouple ? secondaryBright : '#f87171',
+    '--theme-success': isCouple ? primaryBright : '#34d399',
     '--theme-warning': '#fbbf24',
   };
 
@@ -203,11 +203,11 @@ export const NEUTRAL_APP_THEME: AppThemeConfig = {
 export const COUPLE_THEME: AppThemeConfig = {
   id: 'couple',
   name: 'Pareja',
-  primary: '#3b82f6',
-  secondary: '#ec4899',
-  topbar: '#3b82f6',
-  cardBorder: '#bfdbfe',
-  accent: '#eff6ff',
+  primary: '#0b59b3',
+  secondary: '#e35695',
+  topbar: '#0b59b3',
+  cardBorder: '#cfe3fb',
+  accent: '#f3f7ff',
 };
 
 export function getAppTheme(id?: string | null, isCouple?: boolean): AppThemeConfig {

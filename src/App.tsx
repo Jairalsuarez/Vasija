@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { AppShell } from './components/layout/AppShell';
 import { AuthPage } from './pages/AuthPage';
@@ -43,34 +42,14 @@ function LoadingScreen() {
       <div className="vasija-loader" role="status" aria-live="polite">
         <VasijaLoaderAnimation />
 
-        <motion.div
-          className="text-center"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12, duration: 0.35 }}
-        >
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-950 dark:text-white">
-            Vasija
-          </h1>
-          <p className="mt-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-            Preparando tu espacio financiero...
-          </p>
-        </motion.div>
-
-        <div className="vasija-loader__bar" aria-hidden="true">
-          <span />
-        </div>
-
         {showRetry && (
-          <motion.button
+          <button
             type="button"
             onClick={() => window.location.reload()}
             className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-800 dark:bg-[var(--theme-card-bg)] dark:text-gray-200 dark:hover:bg-[var(--theme-hover)]"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
           >
             Reintentar
-          </motion.button>
+          </button>
         )}
       </div>
     </div>
@@ -109,6 +88,7 @@ function AppRoutes() {
     root.classList.toggle('dark', isDarkMode);
     body.classList.toggle('dark', isDarkMode);
     root.dataset.theme = isDarkMode ? 'dark' : 'light';
+    root.dataset.viewMode = isCouple ? 'couple' : 'personal';
     root.style.colorScheme = isDarkMode ? 'dark' : 'light';
 
     Object.entries(activeVars).forEach(([key, val]) => root.style.setProperty(key, val));

@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { useProfileStore, useCoupleStore } from '../store';
+import { useProfileStore, useCoupleStore, useFinanceStore } from '../store';
+
+type AuthProfile = NonNullable<ReturnType<typeof useProfileStore.getState>['profile']>;
 
 export function useAuth() {
   const { setProfile, setAuthenticated, setSessionReady, logout, profile } =
@@ -26,7 +28,7 @@ export function useAuth() {
             return;
           }
 
-          let prof = data as any;
+          let prof = data as AuthProfile | null;
 
           if (!prof) {
             const fallbackName =
@@ -55,7 +57,7 @@ export function useAuth() {
               return;
             }
 
-            prof = createdProfile;
+            prof = createdProfile as AuthProfile;
           }
 
           if (prof && !cancelled) {
@@ -89,6 +91,7 @@ export function useAuth() {
       if (event === 'SIGNED_OUT') {
         logout();
         useCoupleStore.getState().resetCouple();
+        useFinanceStore.getState().resetFinance();
       }
       if (session?.user) {
         setAuthenticated(true);

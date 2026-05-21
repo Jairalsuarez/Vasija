@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { Movement, Debt, Goal, Tithe } from '../types';
 
 interface FinanceState {
@@ -22,9 +23,10 @@ interface FinanceState {
   setBalance: (balance: number) => void;
   setJointBalance: (balance: number) => void;
   setTitheBalance: (balance: number) => void;
+  resetFinance: () => void;
 }
 
-export const useFinanceStore = create<FinanceState>((set) => ({
+const initialFinanceState = {
   movements: [],
   debts: [],
   goals: [],
@@ -32,29 +34,47 @@ export const useFinanceStore = create<FinanceState>((set) => ({
   balance: 0,
   jointBalance: 0,
   titheBalance: 0,
-  setMovements: (movements) => set({ movements }),
-  addMovement: (movement) =>
-    set((s) => ({ movements: [movement, ...s.movements] })),
-  setDebts: (debts) => set({ debts }),
-  addDebt: (debt) => set((s) => ({ debts: [...s.debts, debt] })),
-  updateDebt: (id, updates) =>
-    set((s) => ({
-      debts: s.debts.map((d) => (d.id === id ? { ...d, ...updates } : d)),
-    })),
-  setGoals: (goals) => set({ goals }),
-  addGoal: (goal) => set((s) => ({ goals: [...s.goals, goal] })),
-  updateGoal: (id, updates) =>
-    set((s) => ({
-      goals: s.goals.map((g) => (g.id === id ? { ...g, ...updates } : g)),
-    })),
-  setTithes: (tithes) => set({ tithes }),
-  payTithe: (id) =>
-    set((s) => ({
-      tithes: s.tithes.map((t) =>
-        t.id === id ? { ...t, is_paid: true, paid_at: new Date().toISOString() } : t,
-      ),
-    })),
-  setBalance: (balance) => set({ balance }),
-  setJointBalance: (balance) => set({ jointBalance: balance }),
-  setTitheBalance: (balance) => set({ titheBalance: balance }),
-}));
+};
+
+export const useFinanceStore = create<FinanceState>()(
+  persist(
+    (set) => ({
+      ...initialFinanceState,
+      setMovements: (movements) => set({ movements }),
+      addMovement: (movement) =>
+        set((s) => ({ movements: [movement, ...s.movements] })),
+      setDebts: (debts) => set({ debts }),
+      addDebt: (debt) => set((s) => ({ debts: [...s.debts, debt] })),
+      updateDebt: (id, updates) =>
+        set((s) => ({
+          debts: s.debts.map((d) => (d.id === id ? { ...d, ...updates } : d)),
+        })),
+      setGoals: (goals) => set({ goals }),
+      addGoal: (goal) => set((s) => ({ goals: [...s.goals, goal] })),
+      updateGoal: (id, updates) =>
+        set((s) => ({
+          goals: s.goals.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+        })),
+      setTithes: (tithes) => set({ tithes }),
+      payTithe: (id) =>
+        set((s) => ({
+          tithes: s.tithes.map((t) =>
+            t.id === id ? { ...t, is_paid: true, paid_at: new Date().toISOString() } : t,
+          ),
+        })),
+      setBalance: (balance) => set({ balance }),
+      setJointBalance: (balance) => set({ jointBalance: balance }),
+      setTitheBalance: (balance) => set({ titheBalance: balance }),
+      resetFinance: () => set(initialFinanceState),
+    }),
+    {
+      name: 'finance-store',
+      partialize: (state) => ({
+        movements: state.movements,
+        balance: state.balance,
+        jointBalance: state.jointBalance,
+        titheBalance: state.titheBalance,
+      }),
+    },
+  ),
+);
