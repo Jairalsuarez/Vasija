@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { User, Users, Send, TrendingUp, TrendingDown, HeartHandshake, Percent } from 'lucide-react';
 import { useProfileStore, useFinanceStore, useCoupleStore, useUIStore } from '../store';
 import { formatCurrency } from '../lib/formatters';
 import { getBalance, getMovements, createMovement, completeFastOfferings } from '../services/movementService';
-import { getJointAccount, transferToJoint } from '../services/jointAccountService';
+import { getJointAccount, transferToJoint, transferToPartner } from '../services/jointAccountService';
 import { getTheme } from '../config/themes';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { getPendingTithes, payTithe as payTitheService, addManualTithe } from '../services/titheService';
@@ -27,6 +27,7 @@ export function DashboardPage() {
   const [jointAccountName, setJointAccountName] = useState('Nuestra cuenta');
   const [jointTheme, setJointTheme] = useState('default');
   const [transferOpen, setTransferOpen] = useState(false);
+  const [transferTarget, setTransferTarget] = useState<'joint' | 'partner'>('joint');
   const [transferAmount, setTransferAmount] = useState('');
   const [transferring, setTransferring] = useState(false);
   const [transferError, setTransferError] = useState('');
@@ -59,12 +60,119 @@ export function DashboardPage() {
   const [fastOfferingLoading, setFastOfferingLoading] = useState(false);
 
   const isCoupleMode = viewMode === 'couple';
+  const previousBalanceRef = useRef<number | null>(null);
+  const previousAccountKeyRef = useRef<string | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const soundTimerRef = useRef<number | null>(null);
+  const [balancesReady, setBalancesReady] = useState(false);
+  const [displayedBalance, setDisplayedBalance] = useState(0);
 
   const fastOfferingBalance = movements
     .filter((m) => m.category === 'Ofrenda de Ayuno' && !m.is_paid)
     .reduce((sum, m) => sum + m.amount, 0);
 
   const displayTithe = titheBalance;
+  const activeAccountBalance = isCoupleMode && isLinked ? jointBalance : balance;
+  const activeAccountKey = isCoupleMode && isLinked ? 'joint' : 'personal';
+
+  const goToMoneyPage = (path: '/income' | '/expense') => {
+    sessionStorage.setItem('vasija:balance-start', String(activeAccountBalance));
+    navigate(path);
+  };
+
+  const animateDisplayedBalance = useCallback((start: number, end: number, kind?: 'income' | 'expense') => {
+    if (kind) playBalanceSound(kind);
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    const startedAt = performance.now();
+    const duration = 850;
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayedBalance(start + (end - start) * eased);
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(tick);
+      } else {
+        setDisplayedBalance(end);
+      }
+    };
+    animationFrameRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => {
+    if (!balancesReady) return;
+
+    if (previousAccountKeyRef.current !== null && previousAccountKeyRef.current !== activeAccountKey) {
+      previousAccountKeyRef.current = activeAccountKey;
+      previousBalanceRef.current = activeAccountBalance;
+      setDisplayedBalance(activeAccountBalance);
+      return;
+    }
+    previousAccountKeyRef.current = activeAccountKey;
+
+    if (previousBalanceRef.current === null) {
+      previousBalanceRef.current = activeAccountBalance;
+      const pendingSound = sessionStorage.getItem('vasija:balance-sound') as 'income' | 'expense' | null;
+      const pendingStart = Number(sessionStorage.getItem('vasija:balance-start'));
+      const pendingDelta = Number(sessionStorage.getItem('vasija:balance-delta'));
+      sessionStorage.removeItem('vasija:balance-sound');
+      sessionStorage.removeItem('vasija:balance-start');
+      sessionStorage.removeItem('vasija:balance-delta');
+
+      if (pendingSound === 'income' || pendingSound === 'expense') {
+        const fallbackStart = Number.isFinite(pendingDelta)
+          ? activeAccountBalance + (pendingSound === 'income' ? -pendingDelta : pendingDelta)
+          : activeAccountBalance;
+        const start = Number.isFinite(pendingStart) ? pendingStart : fallbackStart;
+        animateDisplayedBalance(start, activeAccountBalance, pendingSound);
+      } else {
+        setDisplayedBalance(activeAccountBalance);
+      }
+      return;
+    }
+    if (activeAccountBalance === previousBalanceRef.current) return;
+    const start = previousBalanceRef.current;
+    const end = activeAccountBalance;
+    const kind = end > start ? 'income' : 'expense';
+    previousBalanceRef.current = activeAccountBalance;
+    animateDisplayedBalance(start, end, kind);
+
+    return () => {
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, [activeAccountBalance, activeAccountKey, animateDisplayedBalance, balancesReady, displayedBalance]);
+
+  function playBalanceSound(kind: 'income' | 'expense') {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = new AudioContextCtor();
+      const now = ctx.currentTime;
+      const duration = 0.85;
+      const steps = 10;
+      const startTone = kind === 'income' ? 520 : 420;
+      const endTone = kind === 'income' ? 1480 : 180;
+      for (let index = 0; index < steps; index += 1) {
+        const progress = index / Math.max(1, steps - 1);
+        const offset = progress * duration;
+        const tone = startTone + (endTone - startTone) * progress;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = kind === 'income' ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(tone, now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(kind === 'income' ? 0.035 : 0.022, now + offset + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.11);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.13);
+      }
+      if (soundTimerRef.current) window.clearTimeout(soundTimerRef.current);
+      soundTimerRef.current = window.setTimeout(() => void ctx.close(), 1200);
+    } catch {
+      // Audio can be blocked without recent user gesture.
+    }
+  }
 
   const loadData = useCallback(async () => {
     if (!profile) return;
@@ -110,6 +218,7 @@ export function DashboardPage() {
         resetCouple();
       }
     }
+    setBalancesReady(true);
   }, [profile?.id, profile?.partner_alias, setBalance, setMovements, isLinked, isCoupleMode, setTitheBalance, setLinked, setPartner, resetCouple]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -237,10 +346,13 @@ export function DashboardPage() {
     if (isNaN(amount) || amount <= 0) return;
     setTransferring(true);
     setTransferError('');
-    const result = await transferToJoint(profile.id, amount);
+    const result = transferTarget === 'joint'
+      ? await transferToJoint(profile.id, amount)
+      : await transferToPartner(profile.id, amount);
     if (result.success) {
       setTransferOpen(false);
       setTransferAmount('');
+      setTransferTarget('joint');
       loadData();
     } else {
       setTransferError(result.error || 'Error al transferir');
@@ -307,29 +419,43 @@ export function DashboardPage() {
       className="space-y-4"
     >
       {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid gap-3 ${isLinked ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <button
-          onClick={() => setQuickOpen('income')}
-          className="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 flex items-center gap-3 hover:border-green-300 active:scale-[0.98] transition-all"
+          onClick={() => goToMoneyPage('/income')}
+          className="bg-white dark:bg-gray-900 rounded-2xl p-3 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center gap-2 hover:border-green-300 active:scale-[0.98] transition-all"
         >
           <div className="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-950 flex items-center justify-center">
             <TrendingUp className="w-5 h-5 text-green-600" />
           </div>
-          <div className="text-left">
+          <div className="text-center">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Ingreso</p>
-            <p className="text-xs text-gray-400">Agregar dinero</p>
+            <p className="text-[11px] text-gray-400">Agregar</p>
           </div>
         </button>
+        {isLinked && (
+          <button
+            onClick={() => setTransferOpen(true)}
+            className="bg-white dark:bg-gray-900 rounded-2xl p-3 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center gap-2 hover:border-[var(--theme-primary)] active:scale-[0.98] transition-all"
+          >
+            <div className="w-10 h-10 rounded-xl bg-[var(--theme-primary-light)] flex items-center justify-center">
+              <Send className="w-5 h-5 text-[var(--theme-primary)]" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Transferir</p>
+              <p className="text-[11px] text-gray-400">{formatCurrency(balance)}</p>
+            </div>
+          </button>
+        )}
         <button
-          onClick={() => setQuickOpen('expense')}
-          className="bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-800 flex items-center gap-3 hover:border-red-300 active:scale-[0.98] transition-all"
+          onClick={() => goToMoneyPage('/expense')}
+          className="bg-white dark:bg-gray-900 rounded-2xl p-3 border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center gap-2 hover:border-red-300 active:scale-[0.98] transition-all"
         >
           <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950 flex items-center justify-center">
             <TrendingDown className="w-5 h-5 text-red-600" />
           </div>
-          <div className="text-left">
+          <div className="text-center">
             <p className="text-sm font-semibold text-gray-900 dark:text-white">Gasto</p>
-            <p className="text-xs text-gray-400">Quitar dinero</p>
+            <p className="text-[11px] text-gray-400">Quitar</p>
           </div>
         </button>
       </div>
@@ -339,7 +465,6 @@ export function DashboardPage() {
         const isJoint = isCoupleMode && isLinked;
         const t = getTheme(isJoint ? jointTheme : undefined);
         const accName = isJoint ? jointAccountName : (profile?.account_name || 'Mi cuenta');
-        const accBalance = isJoint ? jointBalance : balance;
         return (
           <motion.div
             onClick={() => navigate(isJoint ? '/accounts?type=joint' : '/accounts?type=personal')}
@@ -354,17 +479,9 @@ export function DashboardPage() {
                 {isJoint ? <Users className="w-5 h-5 opacity-80" /> : <User className="w-5 h-5 opacity-80" />}
                 <p className="opacity-80 text-sm font-medium">{accName}</p>
               </div>
-              {isJoint && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setTransferOpen(true); }}
-                  className="flex items-center gap-1.5 text-[11px] font-medium bg-white/20 hover:bg-white/30 rounded-xl px-3 py-1.5 transition-colors"
-                >
-                  <Send className="w-3.5 h-3.5" /> Transferir
-                </button>
-              )}
             </div>
             <h1 className="text-3xl font-bold mt-1 relative z-10">
-              {formatCurrency(accBalance)}
+              {formatCurrency(displayedBalance)}
             </h1>
           </motion.div>
         );
@@ -496,13 +613,39 @@ export function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
           >
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Transferir a nuestro dinero</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Transferir dinero</h3>
             {transferError && (
               <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
                 <p className="text-sm text-red-600 dark:text-red-400">{transferError}</p>
               </div>
             )}
             <p className="text-xs text-gray-400 mb-4">Saldo disponible: {formatCurrency(balance)}</p>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setTransferTarget('joint')}
+                className={`rounded-2xl border p-3 text-left transition ${
+                  transferTarget === 'joint'
+                    ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] text-[var(--theme-primary)]'
+                    : 'border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-200'
+                }`}
+              >
+                <p className="text-sm font-black">Cuenta comun</p>
+                <p className="mt-1 text-[11px] font-bold opacity-70">{jointAccountName}</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTransferTarget('partner')}
+                className={`rounded-2xl border p-3 text-left transition ${
+                  transferTarget === 'partner'
+                    ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] text-[var(--theme-primary)]'
+                    : 'border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-200'
+                }`}
+              >
+                <p className="text-sm font-black">Mi pareja</p>
+                <p className="mt-1 text-[11px] font-bold opacity-70">{partnerAlias || 'Cuenta personal'}</p>
+              </button>
+            </div>
             <div className="mb-4">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">Monto</label>
               <div className="relative">
@@ -519,9 +662,9 @@ export function DashboardPage() {
               </div>
             </div>
             <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setTransferOpen(false)}>Cancelar</Button>
+              <Button variant="secondary" className="flex-1" onClick={() => { setTransferOpen(false); setTransferTarget('joint'); }}>Cancelar</Button>
               <Button className="flex-1" onClick={handleTransfer} loading={transferring} disabled={!transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > balance}>
-                <Send className="w-4 h-4" /> Transferir
+                <Send className="w-4 h-4" /> Enviar
               </Button>
             </div>
           </motion.div>

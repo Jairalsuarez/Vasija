@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Search, Filter, Plus } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFinanceStore, useProfileStore, useCoupleStore } from '../store';
 import { formatCurrency, formatDateShort } from '../lib/formatters';
 import { AddMovementModal } from '../components/finances/AddMovementModal';
@@ -29,16 +31,21 @@ const typeLabels: Record<string, { label: string; icon: string }> = {
 };
 
 export function MovementsPage() {
+  const navigate = useNavigate();
   const { movements, setMovements, setBalance } = useFinanceStore();
   const { profile } = useProfileStore();
-  const { viewMode, partnerAlias } = useCoupleStore();
+  const { viewMode, partnerAlias, setViewMode } = useCoupleStore();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<FilterPeriod>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [detailMovement, setDetailMovement] = useState<Movement | null>(null);
+  const [consumedMovementId, setConsumedMovementId] = useState<string | null>(null);
 
   const isCouple = viewMode === 'couple';
+  const movementId = searchParams.get('movement');
+  const scope = searchParams.get('scope');
 
   const loadData = useCallback(async () => {
     if (!profile) return;
@@ -49,6 +56,27 @@ export function MovementsPage() {
   }, [profile, setMovements, setBalance, isCouple]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  useEffect(() => {
+    if (scope === 'couple') setViewMode('couple');
+    if (scope === 'personal') setViewMode('personal');
+  }, [scope, setViewMode]);
+
+  useEffect(() => {
+    if (!movementId) return;
+    if (consumedMovementId === movementId) return;
+    if (detailMovement?.id === movementId) return;
+    const target = movements.find((m) => m.id === movementId);
+    if (target) {
+      setDetailMovement(target);
+      setConsumedMovementId(movementId);
+      navigate('/movements', { replace: true });
+    }
+  }, [movementId, movements, detailMovement?.id, consumedMovementId, navigate]);
+
+  const closeDetailMovement = () => {
+    setDetailMovement(null);
+  };
 
   const filtered = movements.filter((m) => {
     const matchesSearch = m.description.toLowerCase().includes(search.toLowerCase()) ||
@@ -76,7 +104,7 @@ export function MovementsPage() {
     >
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Movimientos</h2>
-        <Button size="sm" onClick={() => setModalOpen(true)}>
+        <Button size="sm" onClick={() => navigate('/expense')}>
           <Plus className="w-4 h-4" /> Nuevo
         </Button>
       </div>
@@ -204,9 +232,9 @@ export function MovementsPage() {
       <AddMovementModal open={modalOpen} onClose={() => { setModalOpen(false); loadData(); }} isCouple={isCouple} />
 
       {/* Movement detail modal */}
-      {detailMovement && (
+      {detailMovement && createPortal(
         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setDetailMovement(null)} />
+          <div className="fixed inset-0 bg-black/40" onClick={closeDetailMovement} />
           <motion.div
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
@@ -248,7 +276,7 @@ export function MovementsPage() {
                 </div>
               </div>
               <button
-                onClick={() => setDetailMovement(null)}
+                onClick={closeDetailMovement}
                 className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               >
                 ✕
@@ -283,7 +311,8 @@ export function MovementsPage() {
               </div>
             </div>
           </motion.div>
-        </div>
+        </div>,
+        document.body,
       )}
     </motion.div>
   );

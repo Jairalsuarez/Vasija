@@ -50,6 +50,13 @@ export function TopBar() {
     const showBrowserNotification = async (notification: AppNotification) => {
       setToastNotification(notification);
       window.setTimeout(() => setToastNotification(null), 4500);
+      const movementType = typeof notification.metadata?.type === 'string' ? notification.metadata.type : '';
+      if (notification.type === 'success' || movementType === 'income' || notification.title.toLowerCase().includes('ingreso')) {
+        playMoneySound('income');
+      }
+      if (movementType === 'expense' || notification.title.toLowerCase().includes('gasto')) {
+        playMoneySound('expense');
+      }
       if (!('Notification' in window)) return;
       setBrowserPermission(Notification.permission);
       if (Notification.permission !== 'granted') return;
@@ -187,13 +194,65 @@ export function TopBar() {
     }
   };
 
+  const resolveNotificationRoute = (item: AppNotification) => {
+    const metadata = item.metadata || {};
+    if (typeof metadata.route === 'string') return metadata.route;
+
+    if (typeof metadata.movement_id === 'string') {
+      const scope = metadata.scope === 'couple' ? 'couple' : 'personal';
+      return `/movements?movement=${metadata.movement_id}&scope=${scope}`;
+    }
+
+    if (typeof metadata.home_slug === 'string') {
+      const scope = metadata.scope === 'couple' ? 'couple' : 'personal';
+      const schedule = typeof metadata.schedule_id === 'string' ? `&schedule=${metadata.schedule_id}` : '';
+      return `/home/${metadata.home_slug}?scope=${scope}${schedule}`;
+    }
+
+    if (typeof metadata.name_change_request_id === 'string') {
+      return '/accounts?type=joint&focus=name-request';
+    }
+
+    if (item.title.toLowerCase().includes('pago')) return '/home';
+    if (item.title.toLowerCase().includes('movimiento') || item.title.toLowerCase().includes('gasto') || item.title.toLowerCase().includes('ingreso')) return '/movements';
+    return null;
+  };
+
   const handleNotificationClick = (item: AppNotification) => {
-    const route = typeof item.metadata?.route === 'string' ? item.metadata.route : null;
+    const route = resolveNotificationRoute(item);
     if (!route) return;
     if (route.includes('type=joint') && isLinked) setViewMode('couple');
     if (route.includes('type=personal')) setViewMode('personal');
+    if (route.includes('scope=couple') && isLinked) setViewMode('couple');
+    if (route.includes('scope=personal')) setViewMode('personal');
     setNotificationsOpen(false);
     navigate(route);
+  };
+
+  const playMoneySound = (kind: 'income' | 'expense') => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = new AudioContextCtor();
+      const now = ctx.currentTime;
+      const tones = kind === 'income' ? [880, 1174, 1568] : [392, 330, 262];
+      [0, 0.055, 0.11].forEach((offset, index) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = kind === 'income' ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(tones[index], now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(kind === 'income' ? 0.05 : 0.032, now + offset + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.2);
+      });
+      window.setTimeout(() => void ctx.close(), 500);
+    } catch {
+      // Browser may block audio without recent user gesture.
+    }
   };
 
   const coupleNotice = showCoupleNotice ? (
@@ -244,9 +303,9 @@ export function TopBar() {
           <div className="flex items-center gap-3">
             <button
               onClick={toggleSidebar}
-              className="md:hidden p-2 -ml-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"
+              className="md:hidden p-2 -ml-2 rounded-xl hover:bg-gray-100 dark:text-white dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
             >
-              <Menu className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+              <Menu className="w-5 h-5 text-gray-700 dark:text-white" />
             </button>
             <h1 className="text-base font-bold text-gray-900 dark:text-white md:hidden line-clamp-1">
               {pageTitle}
@@ -263,18 +322,18 @@ export function TopBar() {
 
             <button
               onClick={cycleTheme}
-              className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"
+              className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
             >
-              <ThemeIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <ThemeIcon className="w-5 h-5 text-gray-600 dark:text-white" />
             </button>
 
             <div className="relative">
               <button
                 onClick={openNotifications}
-                className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 transition-all"
+                className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
                 aria-label="Notificaciones"
               >
-                <Bell className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                <Bell className="w-5 h-5 text-gray-600 dark:text-white" />
                 {unreadCount > 0 && (
                   <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-pink-600 ring-2 ring-white dark:ring-gray-900" />
                 )}
@@ -300,7 +359,7 @@ export function TopBar() {
                       <p className="py-6 text-center text-sm font-semibold text-gray-400">Sin notificaciones</p>
                     ) : (
                       notifications.map((item) => {
-                        const canOpen = typeof item.metadata?.route === 'string';
+                        const canOpen = !!resolveNotificationRoute(item);
                         return (
                         <button
                           type="button"
@@ -357,10 +416,10 @@ export function TopBar() {
         />
       )}
       {toastNotification && (
-        <div className="fixed left-3 right-3 top-16 z-[1200] md:left-auto md:right-5 md:w-80">
-          <div className="rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl dark:border-blue-950 dark:bg-gray-900">
-            <p className="text-sm font-extrabold text-gray-950 dark:text-white">{toastNotification.title}</p>
-            <p className="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{toastNotification.body}</p>
+        <div className="fixed inset-x-3 bottom-4 z-[1200] md:left-1/2 md:right-auto md:w-[420px] md:-translate-x-1/2">
+          <div className="relative overflow-visible rounded-[20px] border border-[var(--theme-card-border)] bg-white/95 px-4 py-3 shadow-2xl shadow-black/15 backdrop-blur-xl dark:bg-[var(--theme-card-bg)]/95">
+            <p className="line-clamp-1 text-sm font-extrabold text-gray-950 dark:text-white">{toastNotification.title}</p>
+            <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{toastNotification.body}</p>
           </div>
         </div>
       )}

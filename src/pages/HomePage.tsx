@@ -64,15 +64,14 @@ export function HomePage() {
 
   const introText = useMemo(() => {
     if (isCouple) {
-      return 'Automatiza pagos del hogar y comparte esta organizacion con tu pareja. Los gastos se registran en la cuenta conjunta.';
+      return 'Elige las areas que pagan juntos y lleva cada pago en orden.';
     }
-    return 'Automatiza pagos del hogar y controla mejor tus gastos. Los pagos se descuentan de tu cuenta personal.';
+    return 'Elige las areas de tu casa y organiza sus pagos sin enredos.';
   }, [isCouple]);
 
   const begin = () => {
     localStorage.setItem(storageKey, '1');
     setStarted(true);
-    setChooserOpen(true);
   };
 
   const addNiche = (slug: string) => {
@@ -107,7 +106,7 @@ export function HomePage() {
             <Home className="h-7 w-7" />
           </div>
           <h3 className="mt-4 text-2xl font-extrabold text-gray-950 dark:text-white">
-            Organiza tu hogar
+            Pon tu casa en orden
           </h3>
           <p className="mt-2 text-sm font-semibold leading-relaxed text-gray-600 dark:text-gray-300">
             {introText}
@@ -118,6 +117,20 @@ export function HomePage() {
         </section>
       ) : (
         <>
+          {selectedSlugs.length === 0 && (
+            <section className="rounded-3xl border border-[var(--theme-card-border)] bg-white p-5 shadow-sm dark:bg-[var(--theme-card-bg)]">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--theme-primary-light)] text-[var(--theme-primary)]">
+                <Plus className="h-6 w-6" />
+              </div>
+              <h3 className="mt-4 text-lg font-extrabold text-gray-950 dark:text-white">
+                Agrega tu primera area
+              </h3>
+              <p className="mt-2 text-sm font-semibold leading-relaxed text-gray-500 dark:text-gray-300">
+                Toca la caja con el +, elige una area del hogar y luego configura monto, fecha y pago automatico si lo necesitas.
+              </p>
+            </section>
+          )}
+
           <div className="flex items-center justify-between">
             <p className="text-sm font-bold text-gray-900 dark:text-white">Tus gastos</p>
             <p className="text-xs font-extrabold text-gray-400">{selectedSlugs.length}/8</p>

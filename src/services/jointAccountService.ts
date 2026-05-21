@@ -41,6 +41,20 @@ export async function transferToJoint(
   return { success: true, error: null };
 }
 
+export async function transferToPartner(
+  userId: string,
+  amount: number,
+  description?: string,
+): Promise<{ success: boolean; error: string | null }> {
+  const { error } = await supabase.rpc('transfer_to_partner', {
+    from_user_id: userId,
+    amount,
+    description: description || 'Transferencia a mi pareja',
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true, error: null };
+}
+
 export async function updateJointAccountTheme(
   jointAccountId: string,
   theme: string,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Bell, CalendarClock, CheckCircle2, Repeat, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
@@ -56,7 +56,8 @@ export function HomeCategoryPage() {
   const { slug = 'arriendo' } = useParams();
   const config = categoryMap[slug] || categoryMap.arriendo;
   const { profile } = useProfileStore();
-  const { viewMode } = useCoupleStore();
+  const [searchParams] = useSearchParams();
+  const { viewMode, setViewMode } = useCoupleStore();
   const { movements, setMovements } = useFinanceStore();
   const isCouple = viewMode === 'couple';
   const storageKey = `home-plan:${profile?.id || 'anon'}:${slug}:${viewMode}`;
@@ -66,6 +67,12 @@ export function HomeCategoryPage() {
   const [accountBalance, setAccountBalance] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    const scope = searchParams.get('scope');
+    if (scope === 'couple') setViewMode('couple');
+    if (scope === 'personal') setViewMode('personal');
+  }, [searchParams, setViewMode]);
 
   useEffect(() => {
     const raw = localStorage.getItem(storageKey);

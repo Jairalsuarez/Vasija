@@ -8,11 +8,14 @@ import { DashboardPage } from './pages/DashboardPage';
 import { MovementsPage } from './pages/MovementsPage';
 import { DebtsPage } from './pages/DebtsPage';
 import { GoalsPage } from './pages/GoalsPage';
+import { SavingsPage } from './pages/SavingsPage';
 import { AccountSettingsPage } from './pages/AccountSettingsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { CouplePage } from './pages/CouplePage';
 import { HomePage } from './pages/HomePage';
 import { HomeCategoryPage } from './pages/HomeCategoryPage';
+import { IncomePage } from './pages/IncomePage';
+import { ExpensePage } from './pages/ExpensePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AboutPage } from './pages/AboutPage';
@@ -78,50 +81,38 @@ function AppRoutes() {
   const { isAuthenticated, sessionReady, profile } = useProfileStore();
   const { theme } = useUIStore();
   const { viewMode } = useCoupleStore();
+  const [systemDark, setSystemDark] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false,
+  );
 
   useAuth();
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (!isAuthenticated) {
-      root.classList.remove('dark');
-      return;
-    }
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemDark(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else if (theme === 'system') {
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-    } else {
-      root.classList.remove('dark');
-    }
-  }, [theme, isAuthenticated]);
+  const isDarkMode = isAuthenticated && (theme === 'dark' || (theme === 'system' && systemDark));
 
-  // App theme CSS variables
   useEffect(() => {
     const themeId = profile?.app_theme;
     const isCouple = viewMode === 'couple';
     const lightVars = getAppThemeCSS(themeId, isCouple, profile?.gender);
     const darkVars = getAppThemeDarkCSS(themeId, isCouple, profile?.gender);
+    const activeVars = isDarkMode ? darkVars : lightVars;
     const root = document.documentElement;
+    const body = document.body;
 
-    // Apply light mode vars on :root
-    Object.entries(lightVars).forEach(([key, val]) => root.style.setProperty(key, val));
+    root.classList.toggle('dark', isDarkMode);
+    body.classList.toggle('dark', isDarkMode);
+    root.dataset.theme = isDarkMode ? 'dark' : 'light';
+    root.style.colorScheme = isDarkMode ? 'dark' : 'light';
 
-    // Apply dark mode vars on a style tag that only applies when .dark is present
-    let styleEl = document.getElementById('theme-dark-vars') as HTMLStyleElement | null;
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = 'theme-dark-vars';
-      document.head.appendChild(styleEl);
-    }
-    const darkCSS = `.dark { ${Object.entries(darkVars).map(([k, v]) => `${k}: ${v};`).join(' ')} }`;
-    styleEl.textContent = darkCSS;
-  }, [profile?.app_theme, profile?.gender, viewMode]);
+    Object.entries(activeVars).forEach(([key, val]) => root.style.setProperty(key, val));
+  }, [profile?.app_theme, profile?.gender, viewMode, isDarkMode]);
 
   if (!sessionReady) return <LoadingScreen />;
 
@@ -142,7 +133,10 @@ function AppRoutes() {
       >
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/movements" element={<MovementsPage />} />
+        <Route path="/income" element={<IncomePage />} />
+        <Route path="/expense" element={<ExpensePage />} />
         <Route path="/debts" element={<DebtsPage />} />
+        <Route path="/savings" element={<SavingsPage />} />
         <Route path="/home" element={<HomePage />} />
         <Route path="/home/:slug" element={<HomeCategoryPage />} />
         <Route path="/goals" element={<GoalsPage />} />

@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ArrowLeftRight,
   Wallet,
+  PiggyBank,
   Home,
   Target,
   BarChart3,
@@ -17,6 +18,7 @@ const personalLinks = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
   { to: '/movements', icon: ArrowLeftRight, label: 'Movimientos' },
   { to: '/debts', icon: Wallet, label: 'Deudas' },
+  { to: '/savings', icon: PiggyBank, label: 'Ahorros' },
   { to: '/home', icon: Home, label: 'Hogar' },
   { to: '/goals', icon: Target, label: 'Metas' },
   { to: '/reports', icon: BarChart3, label: 'Reportes' },
@@ -28,6 +30,7 @@ const coupleLinks = [
   { to: '/couple', icon: Users, label: 'Pareja' },
   { to: '/movements', icon: ArrowLeftRight, label: 'Movimientos' },
   { to: '/debts', icon: Wallet, label: 'Deudas' },
+  { to: '/savings', icon: PiggyBank, label: 'Ahorros' },
   { to: '/home', icon: Home, label: 'Hogar' },
   { to: '/goals', icon: Target, label: 'Metas' },
   { to: '/reports', icon: BarChart3, label: 'Reportes' },
@@ -37,7 +40,7 @@ const coupleLinks = [
 export function Sidebar() {
   const { pathname } = useLocation();
   const { viewMode } = useCoupleStore();
-  const { sidebarOpen, toggleSidebar } = useUIStore();
+  const { sidebarOpen, closeSidebar } = useUIStore();
   const links = viewMode === 'couple' ? coupleLinks : personalLinks;
 
   const sidebarContent = (
@@ -50,10 +53,10 @@ export function Sidebar() {
           </span>
         </div>
         <button
-          onClick={toggleSidebar}
+          onClick={closeSidebar}
           className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
         >
-          <X className="w-5 h-5 text-gray-500" />
+          <X className="w-5 h-5 text-gray-500 dark:text-white" />
         </button>
       </div>
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
@@ -64,11 +67,11 @@ export function Sidebar() {
             <Link
               key={link.to}
               to={link.to}
-              onClick={() => { if (window.innerWidth < 768) toggleSidebar(); }}
+              onClick={() => { if (window.innerWidth < 768) closeSidebar(); }}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 active
-                  ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:bg-[var(--theme-primary-light)]'
-                  : 'text-gray-600 hover:bg-[var(--theme-hover)] dark:text-gray-400 dark:hover:bg-gray-800'
+                  ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:bg-[var(--theme-primary-light)] dark:text-white'
+                  : 'text-gray-600 hover:bg-[var(--theme-hover)] dark:text-white/85 dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-white'
               }`}
             >
               <Icon className="w-5 h-5 shrink-0" />
@@ -98,7 +101,7 @@ export function Sidebar() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed inset-0 z-40 bg-black/40 md:hidden"
-              onClick={toggleSidebar}
+              onClick={closeSidebar}
             />
             <motion.aside
               initial={{ x: '-100%' }}

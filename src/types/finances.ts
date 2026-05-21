@@ -42,6 +42,16 @@ export interface Goal {
   created_at: string;
 }
 
+export interface Saving {
+  id: string;
+  user_id: string;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  is_couple: boolean;
+  created_at: string;
+}
+
 export interface Tithe {
   id: string;
   user_id: string;

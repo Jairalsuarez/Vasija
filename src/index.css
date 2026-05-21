@@ -329,7 +329,14 @@ select {
 }
 
 .dark .bg-gray-950 {
-  background-color: var(--theme-bg) !important;
+  background-color: var(--theme-card-bg-alt) !important;
+}
+
+.dark .bg-gray-50,
+.dark .bg-gray-100,
+.dark .bg-gray-50\/50,
+.dark .bg-gray-100\/50 {
+  background-color: var(--theme-card-bg-alt) !important;
 }
 
 .dark .border-gray-800,
@@ -352,6 +359,18 @@ select {
 
 .dark .text-gray-300 {
   color: var(--theme-text-primary) !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-950 {
+  color: var(--theme-text-primary) !important;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300,
+.dark .border-gray-700 {
+  border-color: var(--theme-border) !important;
 }
 
 /* Inputs */
@@ -384,15 +403,15 @@ hr {
 
 /* Tailwind v4 Dark Mode Overrides mapping to App Theme variables */
 .dark {
-  --color-gray-50: var(--theme-card-bg-alt);
-  --color-gray-100: var(--theme-hover);
+  --color-gray-50: var(--theme-card-bg);
+  --color-gray-100: var(--theme-card-bg-alt);
   --color-gray-200: var(--theme-border);
   --color-gray-300: var(--theme-border);
   --color-gray-400: var(--theme-text-muted);
   --color-gray-500: var(--theme-text-secondary);
   --color-gray-600: var(--theme-text-secondary);
   --color-gray-700: var(--theme-text-secondary);
-  --color-gray-800: var(--theme-border);
+  --color-gray-800: var(--theme-card-bg-alt);
   --color-gray-900: var(--theme-card-bg);
-  --color-gray-950: var(--theme-bg);
+  --color-gray-950: var(--theme-card-bg-alt);
 }

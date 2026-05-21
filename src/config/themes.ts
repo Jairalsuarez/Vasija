@@ -123,10 +123,14 @@ export function getAppThemeDarkCSS(themeId: string | null | undefined, isCouple:
   const primaryBright = lighten(p, 45);
   const secondaryBright = lighten(s, 45);
 
+  const bg = isCouple ? '#101424' : gender === 'female' ? '#1a1118' : gender === 'male' ? '#0f1724' : '#111827';
+  const card = isCouple ? '#171c2f' : gender === 'female' ? '#241722' : gender === 'male' ? '#172235' : '#1b2430';
+  const cardAlt = isCouple ? '#20263b' : gender === 'female' ? '#2d1d2b' : gender === 'male' ? '#1e2c42' : '#243142';
+
   const dark: Record<string, string> = {
-    '--theme-bg': isCouple ? '#090b18' : gender === 'female' ? '#140811' : gender === 'male' ? '#07111f' : '#0b0f16',
-    '--theme-card-bg': isCouple ? '#111427' : gender === 'female' ? '#1b0d18' : gender === 'male' ? '#0d1828' : '#121822',
-    '--theme-card-bg-alt': isCouple ? '#171b33' : gender === 'female' ? '#25111f' : gender === 'male' ? '#122239' : '#19202b',
+    '--theme-bg': bg,
+    '--theme-card-bg': card,
+    '--theme-card-bg-alt': cardAlt,
     '--theme-card-border': hexToRgba(primaryBright, 0.18),
     '--theme-text-primary': '#f8fafc',
     '--theme-text-secondary': '#94a3b8',
@@ -141,12 +145,12 @@ export function getAppThemeDarkCSS(themeId: string | null | undefined, isCouple:
     '--theme-topbar': isCouple ? `linear-gradient(135deg, ${hexToRgba(primaryBright, 0.22)}, ${hexToRgba(secondaryBright, 0.22)})` : '#0f1624',
     '--theme-accent': hexToRgba(primaryBright, 0.1),
     '--theme-border': hexToRgba(primaryBright, 0.16),
-    '--theme-input-bg': isCouple ? '#0d1020' : gender === 'female' ? '#170914' : gender === 'male' ? '#081425' : '#0d121b',
+    '--theme-input-bg': cardAlt,
     '--theme-input-border': hexToRgba(primaryBright, 0.22),
     '--theme-input-focus-ring': hexToRgba(primaryBright, 0.25),
     '--theme-ring': primaryBright,
     '--theme-icon': '#64748b',
-    '--theme-hover': '#162030',
+    '--theme-hover': hexToRgba(primaryBright, 0.1),
     '--theme-toggle-bg': secondaryBright,
     '--theme-toggle-icon': '#ffffff',
     '--theme-danger': '#f87171',

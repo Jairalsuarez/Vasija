@@ -17,9 +17,8 @@ import { useProfileStore, useCoupleStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import { getBalance } from '../services/movementService';
-import { getJointAccount } from '../services/jointAccountService';
+import { getJointAccount, updateJointAccountTheme } from '../services/jointAccountService';
 import { proposeNameChange, respondNameChange, getPendingNameChange } from '../services/nameChangeService';
-import { getPendingThemeChange, proposeThemeChange, respondThemeChange } from '../services/themeChangeService';
 import { getTheme, JOINT_ACCOUNT_THEMES } from '../config/themes';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { formatCurrency } from '../lib/formatters';
@@ -58,12 +57,6 @@ export function AccountSettingsPage() {
     proposed_name: string;
     created_at: string;
   } | null>(null);
-  const [pendingThemeRequest, setPendingThemeRequest] = useState<{
-    id: string;
-    requester_id: string;
-    proposed_theme: string;
-    created_at: string;
-  } | null>(null);
   const [newJointName, setNewJointName] = useState('');
   const [savingJoint, setSavingJoint] = useState(false);
   const [savingJointTheme, setSavingJointTheme] = useState(false);
@@ -72,11 +65,9 @@ export function AccountSettingsPage() {
 
   const myId = profile?.id;
   const isMyRequest = pendingRequest?.requester_id === myId;
-  const isMyThemeRequest = pendingThemeRequest?.requester_id === myId;
-  const liveThemeId = pendingThemeRequest?.proposed_theme || jointAcc?.theme;
+  const liveThemeId = jointAcc?.theme;
   const jointTheme = getTheme(liveThemeId);
   const nameWaiting = activeMode === 'joint' && !!pendingRequest && isMyRequest;
-  const colorWaiting = activeMode === 'joint' && !!pendingThemeRequest && isMyThemeRequest;
   const partnerLabel = partnerAlias || partnerName || 'Pareja';
 
   const accountView = useMemo(() => {
@@ -121,7 +112,6 @@ export function AccountSettingsPage() {
       theme: acc.theme || 'purple',
     });
     const pending = await getPendingNameChange(acc.id);
-    const pendingTheme = await getPendingThemeChange(acc.id);
     setPendingRequest(
       pending
         ? {
@@ -129,16 +119,6 @@ export function AccountSettingsPage() {
             requester_id: pending.requester_id,
             proposed_name: pending.proposed_name,
             created_at: pending.created_at,
-          }
-        : null,
-    );
-    setPendingThemeRequest(
-      pendingTheme
-        ? {
-            id: pendingTheme.id,
-            requester_id: pendingTheme.requester_id,
-            proposed_theme: pendingTheme.proposed_theme,
-            created_at: pendingTheme.created_at,
           }
         : null,
     );
@@ -164,7 +144,6 @@ export function AccountSettingsPage() {
 
   useEffect(() => {
     if (focus === 'name-request') setActiveEditor('name');
-    if (focus === 'color-request') setActiveEditor('color');
   }, [focus]);
 
   const savePersonalName = async () => {
@@ -226,23 +205,10 @@ export function AccountSettingsPage() {
     if (!jointAcc) return;
     setSavingJointTheme(true);
     setError('');
-    const result = await proposeThemeChange(jointAcc.id, themeId);
-    if (!result.success) setError(result.error || 'No se pudo enviar la solicitud.');
+    const result = await updateJointAccountTheme(jointAcc.id, themeId);
+    if (!result.success) setError(result.error || 'No se pudo cambiar el color.');
     await loadJoint();
-    setSavingJointTheme(false);
-  };
-
-  const handleRespondTheme = async (accept: boolean) => {
-    if (!pendingThemeRequest) return;
-    setSavingJointTheme(true);
-    setError('');
-    const result = await respondThemeChange(pendingThemeRequest.id, accept);
-    if (result.success) {
-      setActiveEditor(null);
-      await loadJoint();
-    } else {
-      setError(result.error || 'No se pudo responder.');
-    }
+    if (result.success) setActiveEditor(null);
     setSavingJointTheme(false);
   };
 
@@ -379,81 +345,55 @@ export function AccountSettingsPage() {
             <button
               type="button"
               onClick={() => setActiveEditor(activeEditor === 'color' ? null : 'color')}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
               aria-label="Editar color"
             >
-              {colorWaiting ? <Clock3 className="h-4 w-4 animate-pulse" /> : <Palette className="h-4 w-4" />}
+              <Palette className="h-5 w-5" />
             </button>
           </div>
         </div>
-
-        {(activeEditor === 'color' || pendingThemeRequest) && (
-          <div className="relative mt-5 flex items-center gap-2 overflow-x-auto rounded-2xl border border-white/15 bg-white/12 p-2 backdrop-blur">
-            {activeMode === 'personal'
-              ? personalThemeOptions.map((option) => {
-                  const active = profile?.gender === option.gender;
-                  return (
-                    <button
-                      key={option.gender}
-                      type="button"
-                      disabled={savingTheme}
-                      onClick={() => savePersonalTheme(option.gender, option.app_theme)}
-                      className={`flex h-11 min-w-11 items-center justify-center rounded-full border transition-all ${
-                        active ? 'border-white bg-white/25' : 'border-white/15 bg-white/10'
-                      }`}
-                      aria-label={option.label}
-                    >
-                      <span className="block h-7 w-7 rounded-full" style={{ backgroundColor: option.color }} />
-                    </button>
-                  );
-                })
-              : JOINT_ACCOUNT_THEMES.map((theme) => {
-                  const active = liveThemeId === theme.id;
-                  const proposedByOther = pendingThemeRequest?.proposed_theme === theme.id && !isMyThemeRequest;
-                  return (
-                    <div key={theme.id} className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        disabled={savingJointTheme || !!pendingThemeRequest}
-                        onClick={() => handleJointTheme(theme.id)}
-                        className={`flex h-11 min-w-11 items-center justify-center rounded-full border transition-all ${
-                          active ? 'border-white bg-white/25' : 'border-white/15 bg-white/10'
-                        } disabled:opacity-80`}
-                        aria-label={theme.label}
-                      >
-                        <span className={`block h-7 w-7 rounded-full ${theme.bg}`} />
-                      </button>
-                      {pendingThemeRequest?.proposed_theme === theme.id && isMyThemeRequest && (
-                        <Clock3 className="h-4 w-4 animate-pulse" />
-                      )}
-                      {proposedByOther && (
-                        <span className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleRespondTheme(false)}
-                            disabled={savingJointTheme}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 transition-all active:scale-95"
-                            aria-label="Rechazar color"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRespondTheme(true)}
-                            disabled={savingJointTheme}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-gray-950 transition-all active:scale-95"
-                            aria-label="Aceptar color"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-          </div>
-        )}
       </section>
+
+      {activeEditor === 'color' && (
+        <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-[var(--theme-card-bg)]">
+          {activeMode === 'personal'
+            ? personalThemeOptions.map((option) => {
+                const active = profile?.gender === option.gender;
+                return (
+                  <button
+                    key={option.gender}
+                    type="button"
+                    disabled={savingTheme}
+                    onClick={() => savePersonalTheme(option.gender, option.app_theme)}
+                    className={`flex h-11 min-w-11 items-center justify-center rounded-full border transition-all ${
+                      active ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)]' : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950'
+                    }`}
+                    aria-label={option.label}
+                  >
+                    <span className="block h-7 w-7 rounded-full" style={{ backgroundColor: option.color }} />
+                  </button>
+                );
+              })
+            : JOINT_ACCOUNT_THEMES.map((theme) => {
+                const active = liveThemeId === theme.id;
+                return (
+                  <div key={theme.id} className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={savingJointTheme}
+                      onClick={() => handleJointTheme(theme.id)}
+                      className={`flex h-11 min-w-11 items-center justify-center rounded-full border transition-all ${
+                        active ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)]' : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950'
+                      } disabled:opacity-80`}
+                      aria-label={theme.label}
+                    >
+                      <span className={`block h-7 w-7 rounded-full ${theme.bg}`} />
+                    </button>
+                  </div>
+                );
+              })}
+        </div>
+      )}
 
       {(error || success) && (
         <div
