@@ -2,11 +2,17 @@ import { supabase } from '../lib/supabase';
 import type { Profile } from '../types';
 
 export async function getProfile(userId: string): Promise<Profile | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error loading profile:', error);
+    return null;
+  }
+
   return data as Profile | null;
 }
 
@@ -27,12 +33,16 @@ export async function uploadAvatar(
   userId: string,
   file: File,
 ): Promise<{ url: string | null; error: string | null }> {
-  const ext = file.name.split('.').pop();
-  const path = `${userId}/avatar.${ext}`;
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const path = `${userId}/avatar-${Date.now()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from('avatars')
-    .upload(path, file, { upsert: true });
+    .upload(path, file, {
+      cacheControl: '3600',
+      contentType: file.type || 'image/jpeg',
+      upsert: true,
+    });
 
   if (uploadError) return { url: null, error: uploadError.message };
 

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { User, Users, Plus, Send, TrendingUp, TrendingDown, Church } from 'lucide-react';
+import { User, Users, Send, TrendingUp, TrendingDown, HeartHandshake, Percent } from 'lucide-react';
 import { useProfileStore, useFinanceStore, useCoupleStore, useUIStore } from '../store';
 import { formatCurrency } from '../lib/formatters';
 import { getBalance, getMovements, createMovement, completeFastOfferings } from '../services/movementService';
-import { getJointAccountBalance, transferToJoint } from '../services/jointAccountService';
+import { getJointAccount, transferToJoint } from '../services/jointAccountService';
+import { getTheme } from '../config/themes';
+import { useAppTheme } from '../hooks/useAppTheme';
 import { getPendingTithes, payTithe as payTitheService, addManualTithe } from '../services/titheService';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
@@ -15,12 +17,15 @@ import { ConfirmModal } from '../components/ui/ConfirmModal';
 
 export function DashboardPage() {
   const { profile } = useProfileStore();
-  const { isLinked, partnerName, partnerAlias, viewMode, setLinked, setPartner, resetCouple } = useCoupleStore();
+  const { isLinked, partnerAlias, viewMode, setLinked, setPartner, resetCouple } = useCoupleStore();
   const { balance, setBalance, setMovements, movements, setTitheBalance, titheBalance } = useFinanceStore();
   const { autoTithe, setAutoTithe } = useUIStore();
   const navigate = useNavigate();
+  const appTheme = useAppTheme();
 
   const [jointBalance, setJointBalance] = useState(0);
+  const [jointAccountName, setJointAccountName] = useState('Nuestra cuenta');
+  const [jointTheme, setJointTheme] = useState('default');
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferAmount, setTransferAmount] = useState('');
   const [transferring, setTransferring] = useState(false);
@@ -68,8 +73,12 @@ export function DashboardPage() {
     const movs = await getMovements(profile.id, isCoupleMode, profile.partner_id);
     setMovements(movs);
     if (isLinked) {
-      const jb = await getJointAccountBalance(profile.id);
-      setJointBalance(jb);
+      const acc = await getJointAccount(profile.id);
+      if (acc) {
+        setJointBalance(acc.balance);
+        setJointAccountName(acc.account_name || 'Nuestra cuenta');
+        setJointTheme(acc.theme || 'default');
+      }
     }
     const pending = await getPendingTithes(profile.id);
     setPendingTithes(pending);
@@ -81,27 +90,27 @@ export function DashboardPage() {
       .from('profiles')
       .select('*')
       .eq('id', profile.id)
-      .single();
+      .maybeSingle();
 
     if (latestProfile) {
       if (latestProfile.partner_id) {
         console.log("[DEBUG DASH] Loading partner info for ID:", latestProfile.partner_id);
         const { data: rawPartner, error: rpcErr } = await supabase
-          .rpc('get_partner_info', { partner_id: latestProfile.partner_id })
-          .single();
+          .rpc('get_partner_info', { v_partner_id: latestProfile.partner_id })
+          .maybeSingle();
         if (rpcErr) {
           console.error("[DEBUG DASH] Error in get_partner_info RPC:", rpcErr);
         } else {
           console.log("[DEBUG DASH] Partner data loaded successfully:", rawPartner);
         }
-        const partnerData = rawPartner as { name: string; avatar_url: string | null; couple_alias: string | null } | null;
+        const partnerData = rawPartner as { name: string; avatar_url: string | null } | null;
         setLinked(true);
-        setPartner(partnerData?.name || 'Pareja', partnerData?.avatar_url || null, partnerData?.couple_alias);
+        setPartner(partnerData?.name || 'Pareja', partnerData?.avatar_url || null, profile?.partner_alias || null);
       } else {
         resetCouple();
       }
     }
-  }, [profile?.id, setBalance, setMovements, isLinked, isCoupleMode, setTitheBalance, setLinked, setPartner, resetCouple]);
+  }, [profile?.id, profile?.partner_alias, setBalance, setMovements, isLinked, isCoupleMode, setTitheBalance, setLinked, setPartner, resetCouple]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -120,11 +129,11 @@ export function DashboardPage() {
           filter: profile.partner_id ? `id=eq.${profile.partner_id}` : undefined,
         },
         async (payload) => {
-          const updatedPartner = payload.new as { name: string; avatar_url: string | null; couple_alias: string | null };
+          const updatedPartner = payload.new as { name: string; avatar_url: string | null };
           setPartner(
             updatedPartner.name || 'Pareja',
             updatedPartner.avatar_url || null,
-            updatedPartner.couple_alias
+            profile?.partner_alias || null
           );
         }
       )
@@ -158,6 +167,24 @@ export function DashboardPage() {
   }, [profile, profile?.partner_id, loadData, setPartner]);
 
   const recentMovements = movements.slice(0, 5);
+
+  const formatMovementActor = (m: Movement) => {
+    if (!profile) return m.description;
+    const isOwn = m.user_id === profile.id;
+    if (isOwn) {
+      if (m.type === 'transfer_to_joint') return 'Transferiste';
+      if (m.type === 'income' && m.description.startsWith('Transferencia de')) return 'Transferiste';
+      if (m.type === 'income') return 'Ingresaste dinero';
+      if (m.type === 'expense') return 'Hiciste un gasto';
+      return m.description;
+    }
+    if (!partnerAlias) return m.description;
+    if (m.type === 'transfer_to_joint') return `${partnerAlias} ha transferido`;
+    if (m.type === 'income' && m.description.startsWith('Transferencia de')) return `${partnerAlias} ha transferido`;
+    if (m.type === 'income') return `${partnerAlias} ingresó dinero`;
+    if (m.type === 'expense') return `${partnerAlias} realizó un gasto`;
+    return `${partnerAlias}: ${m.description}`;
+  };
 
   const handleQuickSubmit = async (bypassConfirm = false) => {
     if (!profile || !quickAmount || !quickOpen) return;
@@ -307,116 +334,98 @@ export function DashboardPage() {
         </button>
       </div>
 
-      {/* Couple balance card */}
-      {isCoupleMode && isLinked && (
-        <div className="bg-gradient-to-br from-purple-600 via-purple-700 to-pink-700 rounded-2xl p-6 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/20 rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-400/20 rounded-full translate-y-1/2 -translate-x-1/2" />
-          <div className="flex items-center gap-2 mb-2 relative z-10">
-            <Users className="w-5 h-5 text-purple-200" />
-            <p className="text-purple-200 text-sm font-medium">
-              {profile?.couple_alias || profile?.name} y {partnerAlias || partnerName || 'Pareja'}
-            </p>
+      {/* Unified account card */}
+      {(() => {
+        const isJoint = isCoupleMode && isLinked;
+        const t = getTheme(isJoint ? jointTheme : undefined);
+        const accName = isJoint ? jointAccountName : (profile?.account_name || 'Mi cuenta');
+        const accBalance = isJoint ? jointBalance : balance;
+        return (
+          <motion.div
+            onClick={() => navigate(isJoint ? '/accounts?type=joint' : '/accounts?type=personal')}
+            whileTap={{ scale: 0.98 }}
+            className={`${isJoint ? t.bg : ''} rounded-2xl p-6 text-white relative overflow-hidden cursor-pointer shadow-lg shadow-black/5 dark:shadow-black/30`}
+            style={!isJoint ? { background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` } : undefined}
+          >
+            <div className={`absolute top-0 right-0 w-32 h-32 ${isJoint ? t.accent : 'bg-white/15'} rounded-full -translate-y-1/2 translate-x-1/2`} />
+            <div className={`absolute bottom-0 left-0 w-24 h-24 ${isJoint ? t.accent : 'bg-white/10'} rounded-full translate-y-1/2 -translate-x-1/2`} />
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-2 mb-2">
+                {isJoint ? <Users className="w-5 h-5 opacity-80" /> : <User className="w-5 h-5 opacity-80" />}
+                <p className="opacity-80 text-sm font-medium">{accName}</p>
+              </div>
+              {isJoint && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setTransferOpen(true); }}
+                  className="flex items-center gap-1.5 text-[11px] font-medium bg-white/20 hover:bg-white/30 rounded-xl px-3 py-1.5 transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" /> Transferir
+                </button>
+              )}
+            </div>
+            <h1 className="text-3xl font-bold mt-1 relative z-10">
+              {formatCurrency(accBalance)}
+            </h1>
+          </motion.div>
+        );
+      })()}
+
+      {!isLinked && (
+        <button
+          onClick={() => navigate('/couple')}
+          className="w-full rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 to-pink-50 p-4 text-left transition active:scale-[0.99] dark:border-blue-950 dark:from-blue-950/30 dark:to-pink-950/20"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm dark:bg-gray-900">
+              <HeartHandshake className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-gray-950 dark:text-white">Conectar con mi pareja</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Crea o ingresa un código de conexión</p>
+            </div>
           </div>
-          <h1 className="text-3xl font-bold mt-1 relative z-10">
-            {formatCurrency(jointBalance)}
-          </h1>
-          <p className="text-purple-200 text-sm mt-1 relative z-10">Nuestro dinero</p>
-        </div>
+        </button>
       )}
 
-      {/* Personal account */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-200 dark:border-gray-800">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center">
-              <User className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                {isCoupleMode ? 'Mi cuenta' : 'Mi dinero'}
-              </p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-0.5">
-                {formatCurrency(balance)}
-              </p>
-            </div>
-          </div>
-          {isLinked && (
-            <button
-              onClick={() => setTransferOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-medium text-purple-600 hover:text-purple-700 bg-purple-50 dark:bg-purple-950 px-3 py-2 rounded-xl"
-            >
-              <Send className="w-3.5 h-3.5" /> Transferir
-            </button>
-          )}
-        </div>
-        {!isLinked && (
-          <button
-            onClick={() => navigate('/couple')}
-            className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 text-sm font-medium text-pink-600 hover:border-pink-400 active:scale-[0.98] transition-all"
-          >
-            <Plus className="w-4 h-4" /> Conectar con mi pareja
-          </button>
-        )}
-      </div>
-
-      {/* Iglesia Account */}
+      {/* Iglesia */}
       {!isCoupleMode && (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-200 dark:border-gray-800 space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center">
-                <Church className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Iglesia</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             {/* Tithing */}
-            <div 
+            <motion.div
+              whileTap={{ scale: 0.97 }}
               onClick={() => setTitheModalOpen(true)}
-              className="space-y-1 bg-gray-50 dark:bg-gray-800/40 p-4 rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:shadow-md hover:border-amber-300 dark:hover:border-amber-700 active:scale-[0.98] transition-all flex flex-col justify-between"
+              className={`rounded-xl p-3 cursor-pointer border transition-all ${
+                titheBalance > 0
+                  ? 'bg-[var(--theme-primary-light)] border-[var(--theme-card-border)]'
+                  : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800'
+              }`}
             >
-              <div>
-                <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mb-1">Diezmo</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(displayTithe)}
-                </p>
-              </div>
-              {titheBalance > 0 ? (
-                <p className="text-[10px] text-amber-600 font-semibold mt-2">⚠️ Pago pendiente</p>
-              ) : (
-                <p className="text-[10px] text-green-600 font-semibold mt-2">✓ Al día</p>
-              )}
-            </div>
+              <p className="text-[11px] font-semibold text-[var(--theme-primary)]">Diezmo</p>
+              <p className={`text-base font-bold mt-0.5 ${titheBalance > 0 ? 'text-[var(--theme-primary)]' : 'text-gray-900 dark:text-white'}`}>
+                {formatCurrency(displayTithe)}
+              </p>
+            </motion.div>
 
             {/* Fast Offering */}
-            <div 
+            <motion.div
+              whileTap={{ scale: 0.97 }}
               onClick={() => setFastOfferingModalOpen(true)}
-              className="space-y-1 bg-gray-50 dark:bg-gray-800/40 p-4 rounded-xl border border-gray-100 dark:border-gray-800 cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 active:scale-[0.98] transition-all flex flex-col justify-between"
+              className={`rounded-xl p-3 cursor-pointer border transition-all ${
+                fastOfferingBalance > 0
+                  ? 'bg-[var(--theme-secondary-light)] border-[var(--theme-card-border)]'
+                  : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800'
+              }`}
             >
-              <div>
-                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">Ofrendas de Ayuno</p>
-                <p className="text-lg font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(fastOfferingBalance)}
-                </p>
-              </div>
-              {fastOfferingBalance > 0 ? (
-                <p className="text-[10px] text-blue-600 font-semibold mt-2">⚠️ Por completar</p>
-              ) : (
-                <p className="text-[10px] text-green-600 font-semibold mt-2">✓ Al día</p>
-              )}
-            </div>
+              <p className="text-[11px] font-semibold text-[var(--theme-secondary)]">Ofrendas</p>
+              <p className={`text-base font-bold mt-0.5 ${fastOfferingBalance > 0 ? 'text-[var(--theme-secondary)]' : 'text-gray-900 dark:text-white'}`}>
+                {formatCurrency(fastOfferingBalance)}
+              </p>
+            </motion.div>
           </div>
 
-          {/* Auto-tithe settings switch */}
-          <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-800">
-            <div>
-              <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Descuento automático (10%)</p>
-            </div>
+          <div className="flex items-center justify-between px-1">
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">Descuento automático (10%)</p>
             <Switch checked={autoTithe} onChange={setAutoTithe} />
           </div>
         </div>
@@ -541,7 +550,7 @@ export function DashboardPage() {
                     {m.type === 'income' ? '+' : m.type === 'transfer_to_joint' ? '↗' : '−'}
                   </div>
                   <div className="text-left min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{m.description}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{formatMovementActor(m)}</p>
                     <p className="text-xs text-gray-400">{new Date(m.date).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(m.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                 </div>
@@ -556,7 +565,7 @@ export function DashboardPage() {
             ))}
             <button
               onClick={() => navigate('/movements')}
-              className="w-full text-center text-xs text-purple-600 font-medium py-2 hover:underline"
+              className="w-full text-center text-xs text-[var(--theme-primary)] font-medium py-2 hover:underline"
             >
               Ver todos los movimientos
             </button>
@@ -583,7 +592,7 @@ export function DashboardPage() {
                   {detailMovement.type === 'income' ? '+' : detailMovement.type === 'transfer_to_joint' ? '↗' : '−'}
                 </div>
                 <div>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{detailMovement.description}</p>
+                  <p className="text-lg font-bold text-gray-900 dark:text-white">{formatMovementActor(detailMovement)}</p>
                   <p className="text-xs text-gray-400 capitalize">{detailMovement.type === 'transfer_to_joint' ? 'Transferencia a nuestro dinero' : detailMovement.type}</p>
                 </div>
               </div>
@@ -624,7 +633,7 @@ export function DashboardPage() {
             </div>
             <button
               onClick={() => { setDetailMovement(null); navigate('/movements'); }}
-              className="w-full mt-4 text-center text-xs text-purple-600 font-medium py-2 hover:underline"
+              className="w-full mt-4 text-center text-xs text-[var(--theme-primary)] font-medium py-2 hover:underline"
             >
               Ver todos los movimientos
             </button>
@@ -641,12 +650,10 @@ export function DashboardPage() {
             className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
           >
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-              <Church className="w-5 h-5 text-amber-600" />
+              <Percent className="w-5 h-5 text-amber-600" />
               Gestión de Diezmo
             </h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Controla tus aportes y pagos de diezmo para la Iglesia.
-            </p>
+
 
             <div className="space-y-4">
               {/* Pending Tithe Info */}
@@ -720,12 +727,10 @@ export function DashboardPage() {
             className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
           >
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-              <Church className="w-5 h-5 text-blue-600" />
+              <HeartHandshake className="w-5 h-5 text-blue-600" />
               Gestión de Ofrenda de Ayuno
             </h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Administra tus aportaciones y completa tus ofrendas de ayuno acumuladas.
-            </p>
+
 
             <div className="space-y-4">
               {/* Accumulated offerings */}

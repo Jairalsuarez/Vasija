@@ -1,83 +1,68 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Target, Sparkles } from 'lucide-react';
-import { GenderBackground } from '../ui/GenderBackground';
-
-const slides = [
-  { phrase: 'Finanzas en pareja', Icon: Heart },
-  { phrase: 'Metas en común', Icon: Target },
-  { phrase: 'Amor y prosperidad', Icon: Sparkles },
-];
+import { motion } from 'framer-motion';
+import { VasijaLoaderAnimation } from './VasijaLoaderAnimation';
 
 export function SplashScreen({ onFinish }: { onFinish: () => void }) {
-  const [idx, setIdx] = useState(0);
+  const [showSkip, setShowSkip] = useState(false);
   const done = useRef(false);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIdx((prev) => {
-        const next = prev + 1;
-        if (next >= slides.length) {
-          clearInterval(interval);
-          setTimeout(() => {
-            if (!done.current) {
-              done.current = true;
-              onFinish();
-            }
-          }, 300);
-          return prev;
-        }
-        return next;
-      });
-    }, 1400);
-    return () => clearInterval(interval);
-  }, []);
+    const skipTimer = window.setTimeout(() => setShowSkip(true), 1800);
+    const finishTimer = window.setTimeout(() => {
+      if (!done.current) {
+        done.current = true;
+        onFinish();
+      }
+    }, 7100);
 
-  const { phrase, Icon } = slides[idx];
+    return () => {
+      window.clearTimeout(skipTimer);
+      window.clearTimeout(finishTimer);
+    };
+  }, [onFinish]);
+
+  const finishNow = () => {
+    if (!done.current) {
+      done.current = true;
+      onFinish();
+    }
+  };
 
   return (
-    <GenderBackground>
-      <div className="flex flex-col items-center">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={idx}
-            initial={{ rotate: -180, scale: 0 }}
-            animate={{ rotate: 0, scale: 1 }}
-            exit={{ rotate: 180, scale: 0 }}
-            transition={{ duration: 0.35, ease: 'easeInOut' }}
-          >
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-600 to-pink-600 flex items-center justify-center shadow-lg">
-              <Icon className="w-14 h-14 text-white" />
-            </div>
-          </motion.div>
-        </AnimatePresence>
+    <div className="auth-screen relative">
+      <div className="vasija-loader" role="status" aria-live="polite">
+        <VasijaLoaderAnimation />
 
-        <div className="h-8 mt-8 flex items-center justify-center overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={idx}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="text-xl font-light text-gray-700 tracking-wide whitespace-nowrap"
-            >
-              {phrase}
-            </motion.p>
-          </AnimatePresence>
+        <motion.div
+          className="text-center"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12, duration: 0.35 }}
+        >
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-950 dark:text-white">
+            Vasija
+          </h1>
+          <p className="mt-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+            Preparando tu espacio financiero...
+          </p>
+        </motion.div>
+
+        <div className="vasija-loader__bar" aria-hidden="true">
+          <span />
         </div>
-      </div>
 
-      <div className="absolute bottom-16 flex gap-2">
-        {slides.map((_, i) => (
-          <div
-            key={i}
-            className={`h-2 rounded-full transition-all duration-300 ${
-              i === idx ? 'w-6 bg-blue-600' : 'w-2 bg-gray-300'
-            }`}
-          />
-        ))}
+        {showSkip && (
+          <motion.button
+            type="button"
+            onClick={finishNow}
+            className="mt-5 rounded-xl px-4 py-2 text-sm font-semibold text-gray-500 transition hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            Continuar
+          </motion.button>
+        )}
       </div>
-    </GenderBackground>
+    </div>
   );
 }

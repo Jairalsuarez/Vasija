@@ -26,8 +26,8 @@ export function ConfirmModal({
   type = 'info',
 }: ConfirmModalProps) {
   const Icon = type === 'warning' ? AlertTriangle : type === 'success' ? CheckCircle2 : HelpCircle;
-  const iconColor = type === 'warning' ? 'text-amber-500' : type === 'success' ? 'text-green-500' : 'text-purple-500';
-  const iconBg = type === 'warning' ? 'bg-amber-50 dark:bg-amber-950/30' : type === 'success' ? 'bg-green-50 dark:bg-green-950/30' : 'bg-purple-50 dark:bg-purple-950/30';
+  const iconColor = type === 'warning' ? 'text-amber-500' : type === 'success' ? 'text-green-500' : 'text-[var(--theme-primary)]';
+  const iconBg = type === 'warning' ? 'bg-amber-50 dark:bg-amber-950/30' : type === 'success' ? 'bg-green-50 dark:bg-green-950/30' : 'bg-[var(--theme-primary-light)]';
 
   return (
     <AnimatePresence>
@@ -52,7 +52,7 @@ export function ConfirmModal({
           >
             <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-800 w-full max-w-sm overflow-hidden pointer-events-auto p-6 relative">
               {/* Top Accent Gradient */}
-              <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-500 via-pink-500 to-amber-500" />
+              <div className="absolute top-0 left-0 right-0 h-1.5" style={{ background: 'linear-gradient(to right, var(--theme-primary), var(--theme-secondary), var(--theme-warning, #f59e0b))' }} />
               
               <div className="flex flex-col items-center text-center mt-2">
                 {/* Beautiful Animated Icon */}
@@ -96,8 +96,9 @@ export function ConfirmModal({
                 </Button>
                 <Button
                   className={`flex-1 rounded-xl text-sm py-2.5 ${
-                    type === 'warning' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'
+                    type === 'warning' ? 'bg-amber-600 hover:bg-amber-700' : ''
                   }`}
+                  style={type !== 'warning' ? { backgroundColor: 'var(--theme-primary)' } : undefined}
                   onClick={() => {
                     onConfirm();
                     onClose();

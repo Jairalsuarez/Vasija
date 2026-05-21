@@ -15,7 +15,7 @@ export function ProgressBar({
   label,
   showPercentage = true,
   size = 'md',
-  color = 'bg-blue-600 dark:bg-blue-500',
+  color = 'bg-[var(--theme-primary)]',
 }: ProgressBarProps) {
   const percentage = max > 0 ? Math.min((value / max) * 100, 100) : 0;
 

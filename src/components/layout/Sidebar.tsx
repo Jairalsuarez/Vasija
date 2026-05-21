@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ArrowLeftRight,
   Wallet,
+  Home,
   Target,
   BarChart3,
   Users,
@@ -16,6 +17,7 @@ const personalLinks = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Inicio' },
   { to: '/movements', icon: ArrowLeftRight, label: 'Movimientos' },
   { to: '/debts', icon: Wallet, label: 'Deudas' },
+  { to: '/home', icon: Home, label: 'Hogar' },
   { to: '/goals', icon: Target, label: 'Metas' },
   { to: '/reports', icon: BarChart3, label: 'Reportes' },
   { to: '/settings', icon: Settings, label: 'Ajustes' },
@@ -26,6 +28,7 @@ const coupleLinks = [
   { to: '/couple', icon: Users, label: 'Pareja' },
   { to: '/movements', icon: ArrowLeftRight, label: 'Movimientos' },
   { to: '/debts', icon: Wallet, label: 'Deudas' },
+  { to: '/home', icon: Home, label: 'Hogar' },
   { to: '/goals', icon: Target, label: 'Metas' },
   { to: '/reports', icon: BarChart3, label: 'Reportes' },
   { to: '/settings', icon: Settings, label: 'Ajustes' },
@@ -64,8 +67,8 @@ export function Sidebar() {
               onClick={() => { if (window.innerWidth < 768) toggleSidebar(); }}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
                 active
-                  ? 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-400'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:bg-[var(--theme-primary-light)]'
+                  : 'text-gray-600 hover:bg-[var(--theme-hover)] dark:text-gray-400 dark:hover:bg-gray-800'
               }`}
             >
               <Icon className="w-5 h-5 shrink-0" />

@@ -15,6 +15,7 @@ interface AddDebtModalProps {
 export function AddDebtModal({ open, onClose, isCouple = false }: AddDebtModalProps) {
   const { profile } = useProfileStore();
   const { addDebt } = useFinanceStore();
+  const [step, setStep] = useState<'kind' | 'form'>('kind');
   const [name, setName] = useState('');
   const [type, setType] = useState<DebtType>('finite');
   const [totalAmount, setTotalAmount] = useState('');
@@ -22,6 +23,15 @@ export function AddDebtModal({ open, onClose, isCouple = false }: AddDebtModalPr
   const [interestRate, setInterestRate] = useState('0');
   const [dueDate, setDueDate] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const presets = isCouple
+    ? ['Hipoteca', 'Prestamo familiar', 'Tarjeta compartida', 'Electrodomestico', 'Vehiculo', 'Personalizada']
+    : ['Tarjeta de credito', 'Prestamo personal', 'Estudios', 'Vehiculo', 'Compra a cuotas', 'Personalizada'];
+
+  const choosePreset = (preset: string) => {
+    setName(preset === 'Personalizada' ? '' : preset);
+    setStep('form');
+  };
 
   const handleSubmit = async () => {
     if (!profile || !totalAmount || !name || !dueDate) return;
@@ -41,11 +51,48 @@ export function AddDebtModal({ open, onClose, isCouple = false }: AddDebtModalPr
     onClose();
     setName('');
     setTotalAmount('');
+    setStep('kind');
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Nueva deuda">
+    <Modal open={open} onClose={onClose} title={isCouple ? 'Nueva deuda en pareja' : 'Nueva deuda personal'}>
       <div className="space-y-4">
+        {step === 'kind' ? (
+          <>
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              ¿Qué deuda vas a registrar?
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {presets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => choosePreset(preset)}
+                  className="rounded-2xl border border-gray-200 bg-white p-3 text-left text-sm font-bold text-gray-900 transition active:scale-[0.98] dark:border-gray-800 dark:bg-gray-950 dark:text-white"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => { setType('finite'); setStep('form'); }}
+                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"
+              >
+                Finita
+              </button>
+              <button
+                type="button"
+                onClick={() => { setType('infinite'); setStep('form'); }}
+                className="rounded-xl bg-purple-600 px-4 py-3 text-sm font-bold text-white"
+              >
+                Continua
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
         <Input
           label="Nombre"
           placeholder="Ej: Tarjeta de crédito"
@@ -118,6 +165,8 @@ export function AddDebtModal({ open, onClose, isCouple = false }: AddDebtModalPr
         >
           Agregar deuda
         </Button>
+          </>
+        )}
       </div>
     </Modal>
   );

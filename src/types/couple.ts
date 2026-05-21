@@ -10,7 +10,19 @@ export interface JointAccount {
   id: string;
   couple_id: string;
   balance: number;
+  account_name?: string | null;
+  theme?: string;
   updated_at: string;
+}
+
+export interface NameChangeRequest {
+  id: string;
+  joint_account_id: string;
+  requester_id: string;
+  proposed_name: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  responded_at: string | null;
 }
 
 export interface JointTransaction {

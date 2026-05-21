@@ -1,6 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Infinity, Hash, CheckCircle, Plus } from 'lucide-react';
+
+const ease = [0.16, 1, 0.3, 1] as const;
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.06, duration: 0.35, ease },
+  }),
+};
 import { useFinanceStore, useProfileStore, useCoupleStore } from '../store';
 import { formatCurrency } from '../lib/formatters';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -39,7 +50,12 @@ export function DebtsPage() {
       className="space-y-5"
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Deudas</h2>
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">Deudas</h2>
+          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+            {isCouple ? 'Deudas en pareja' : 'Deudas personales'}
+          </p>
+        </div>
         <Button size="sm" onClick={() => setModalOpen(true)}>
           <Plus className="w-4 h-4" /> Nueva deuda
         </Button>
@@ -52,8 +68,15 @@ export function DebtsPage() {
             <h3 className="font-semibold text-gray-700 dark:text-gray-300 text-sm">Finitas</h3>
           </div>
           <div className="space-y-3">
-            {finiteDebts.map((debt) => (
-              <div key={debt.id} className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+            {finiteDebts.map((debt, i) => (
+              <motion.div
+                key={debt.id}
+                custom={i}
+                variants={itemVariants}
+                initial="hidden"
+                animate="visible"
+                className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 active:scale-[0.99] transition-transform"
+              >
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-white">{debt.name}</p>
@@ -82,7 +105,7 @@ export function DebtsPage() {
                     Pagar cuota
                   </Button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>
@@ -95,8 +118,15 @@ export function DebtsPage() {
             <h3 className="font-semibold text-gray-700 dark:text-gray-300 text-sm">Infinitas</h3>
           </div>
           <div className="space-y-3">
-            {infiniteDebts.map((debt) => (
-              <div key={debt.id} className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800">
+            {infiniteDebts.map((debt, i) => (
+              <motion.div
+                key={debt.id}
+                custom={i + finiteDebts.length}
+                variants={itemVariants}
+                initial="hidden"
+                animate="visible"
+                className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 active:scale-[0.99] transition-transform"
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-white">{debt.name}</p>
@@ -123,7 +153,7 @@ export function DebtsPage() {
                     Abonar
                   </Button>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>

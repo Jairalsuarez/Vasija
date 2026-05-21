@@ -11,11 +11,11 @@ const base =
 
 const variants = {
   primary:
-    'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
+    'text-white hover:brightness-110 active:brightness-90',
   secondary:
-    'bg-pink-50 text-pink-700 hover:bg-pink-100 focus:ring-pink-400 border border-pink-200',
+    'hover:brightness-95 active:brightness-105 border transition-all duration-200',
   ghost:
-    'bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-400',
+    'bg-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 focus:ring-gray-400',
   danger:
     'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
 };
@@ -38,6 +38,17 @@ export function Button({
   return (
     <button
       className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}
+      style={
+        variant === 'primary'
+          ? { backgroundColor: 'var(--theme-primary, #3b82f6)' }
+          : variant === 'secondary'
+          ? {
+              backgroundColor: 'var(--theme-primary-light, rgba(59,130,246,0.08))',
+              color: 'var(--theme-primary, #3b82f6)',
+              borderColor: 'var(--theme-primary-light, rgba(59,130,246,0.15))',
+            }
+          : undefined
+      }
       disabled={disabled || loading}
       {...props}
     >

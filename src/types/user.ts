@@ -15,6 +15,8 @@ export interface Profile {
   couple_code: string | null;
   partner_id: string | null;
   couple_alias?: string | null;
+  partner_alias?: string | null;
+  account_name?: string | null;
   created_at: string;
   theme_preference: 'light' | 'dark' | 'system';
 }

@@ -35,23 +35,19 @@ export async function createMovement(
     .single();
   const mov = data as Movement | null;
   let tithe: Tithe | null = null;
-  if (mov && movement.type === 'income' && !movement.is_couple) {
-    // Always register tithe as pending so it shows in the counter
-    // The movement (deduction) is created separately below when autoTithe is on
+  if (mov && movement.type === 'income' && !movement.is_couple && autoTithe) {
     tithe = await registerTithe(movement.user_id, movement.amount, mov.id, false);
-    if (autoTithe) {
-      await supabase
-        .from('movements')
-        .insert({
-          user_id: movement.user_id,
-          type: 'tithe',
-          amount: movement.amount * 0.1,
-          description: 'Diezmo',
-          category: 'Iglesia',
-          date: movement.date,
-          is_couple: false,
-        });
-    }
+    await supabase
+      .from('movements')
+      .insert({
+        user_id: movement.user_id,
+        type: 'tithe',
+        amount: movement.amount * 0.1,
+        description: 'Diezmo',
+        category: 'Iglesia',
+        date: movement.date,
+        is_couple: false,
+      });
   }
   return { movement: mov, tithe };
 }

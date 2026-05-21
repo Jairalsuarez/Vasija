@@ -5,13 +5,16 @@ import type { Gender } from '../types';
 interface UserProfile {
   id: string;
   email: string | null;
-  phone: string;
-  country_code: string;
+  phone?: string;
+  country_code?: string;
   name: string;
   age: number;
   gender: Gender;
   avatar_url: string | null;
-  phone_verified: boolean;
+  phone_verified?: boolean;
+  account_name?: string | null;
+  partner_alias?: string | null;
+  app_theme?: string | null;
   couple_code: string | null;
   partner_id: string | null;
   couple_alias?: string | null;
@@ -53,7 +56,7 @@ export const useProfileStore = create<ProfileState>()(
         profile: null,
         isAuthenticated: false,
         isOnboarded: false,
-        sessionReady: false,
+        sessionReady: true,
       }),
     }),
     { name: 'auth-store' },

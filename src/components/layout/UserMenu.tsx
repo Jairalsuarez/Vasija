@@ -6,7 +6,7 @@ import {
   Info,
   LogOut,
 } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { signOut } from '../../services/authService';
 import { useProfileStore, useUIStore, useCoupleStore } from '../../store';
 
 export function UserMenu() {
@@ -16,11 +16,12 @@ export function UserMenu() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    logout();
-    resetCouple();
     closeUserMenu();
-    navigate('/');
+    resetCouple();
+    logout();
+    navigate('/', { replace: true });
+    const { error } = await signOut();
+    if (error) console.warn('Supabase sign out failed:', error);
   };
 
   const items = [

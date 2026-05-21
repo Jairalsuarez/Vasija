@@ -20,9 +20,9 @@ export function Switch({ checked, onChange, label, disabled, iconChecked: IconCh
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+      className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-[var(--theme-ring)] focus:ring-offset-2 ${
         checked
-          ? 'bg-pink-400 dark:bg-pink-500'
+          ? 'bg-[var(--theme-toggle-bg)]'
           : 'bg-gray-300 dark:bg-gray-600'
       } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
     >
@@ -33,7 +33,7 @@ export function Switch({ checked, onChange, label, disabled, iconChecked: IconCh
           checked ? 'ml-6' : 'ml-1'
         }`}
       >
-        {Icon && <Icon className={`w-3 h-3 ${checked ? 'text-pink-600' : 'text-blue-600'}`} />}
+        {Icon && <Icon className={`w-3 h-3 ${checked ? 'text-[var(--theme-primary)]' : 'text-blue-600'}`} />}
       </motion.span>
       {label && (
         <span className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">

@@ -9,19 +9,13 @@ interface CodeOwner {
 export async function generateCoupleLink(
   userId: string,
 ): Promise<{ code: string | null; error: string | null }> {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  const { data, error } = await supabase
+    .rpc('create_couple_code', { v_user_id: userId })
+    .single();
 
-  const { error } = await supabase.from('couple_links').insert({
-    user_id: userId,
-    code,
-  });
-
-  if (error) return { code: null, error: error.message };
-  return { code, error: null };
+  const row = data as { code: string } | null;
+  if (error || !row?.code) return { code: null, error: error?.message || 'Error al generar código' };
+  return { code: row.code, error: null };
 }
 
 export async function lookupCode(
@@ -29,7 +23,7 @@ export async function lookupCode(
 ): Promise<{ name: string | null; avatar: string | null; partnerId: string | null; error: string | null }> {
   const { data: rawData, error: rpcError } = await supabase
     .rpc('get_code_owner', { code_text: code })
-    .single();
+    .maybeSingle();
 
   const data = rawData as unknown as CodeOwner | null;
 
@@ -51,7 +45,7 @@ export async function linkWithCode(
 ): Promise<{ success: boolean; error: string | null }> {
   const { data: rawData, error: rpcError } = await supabase
     .rpc('get_code_owner', { code_text: code })
-    .single();
+    .maybeSingle();
 
   const data = rawData as unknown as CodeOwner | null;
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Link2,
   Link2Off,
@@ -13,7 +14,11 @@ import {
   Sparkles,
   Clock,
   HeartHandshake,
-  Pencil,
+  Edit3,
+  CheckCircle2,
+  XCircle,
+  SendHorizonal,
+  PartyPopper,
 } from 'lucide-react';
 import { useCoupleStore, useProfileStore } from '../store';
 import { Button } from '../components/ui/Button';
@@ -27,8 +32,11 @@ import {
   updateCoupleDetails,
   type CoupleDetails,
 } from '../services/coupleService';
+import { getJointAccount } from '../services/jointAccountService';
+import { proposeNameChange, respondNameChange, getPendingNameChange } from '../services/nameChangeService';
 
 export function CouplePage() {
+  const navigate = useNavigate();
   const { profile, updateProfile } = useProfileStore();
   const {
     coupleCode,
@@ -54,7 +62,6 @@ export function CouplePage() {
     name: string;
     avatar: string | null;
     id: string;
-    couple_alias: string | null;
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -64,61 +71,9 @@ export function CouplePage() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
 
-  // Alias states
-  const [aliasInput, setAliasInput] = useState(profile?.couple_alias || '');
+  // Partner alias state
+  const [aliasInput, setAliasInput] = useState(profile?.partner_alias || '');
   const [aliasSaving, setAliasSaving] = useState(false);
-  const [aliasError, setAliasError] = useState('');
-  const [isEditingAlias, setIsEditingAlias] = useState(!profile?.couple_alias);
-
-  // Validation for Alias
-  const handleAliasChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setAliasInput(val);
-
-    if (val.length > 8) {
-      setAliasError('No más de 8 caracteres.');
-      return;
-    }
-
-    const words = val.trim().split(/\s+/).filter(Boolean);
-    if (words.length > 2) {
-      setAliasError('Máximo 2 palabras.');
-      return;
-    }
-
-    setAliasError('');
-  };
-
-  const saveAlias = async () => {
-    if (!profile) return;
-    setAliasSaving(true);
-    setAliasError('');
-
-    const words = aliasInput.trim().split(/\s+/).filter(Boolean);
-    if (words.length > 2) {
-      setAliasError('Máximo 2 palabras.');
-      setAliasSaving(false);
-      return;
-    }
-    if (aliasInput.length > 8) {
-      setAliasError('No más de 8 caracteres.');
-      setAliasSaving(false);
-      return;
-    }
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ couple_alias: aliasInput.trim() || null })
-      .eq('id', profile.id);
-
-    if (updateError) {
-      setAliasError(updateError.message);
-    } else {
-      updateProfile({ couple_alias: aliasInput.trim() || null });
-      setIsEditingAlias(false);
-    }
-    setAliasSaving(false);
-  };
 
   // Fetch couple details when linked
   useEffect(() => {
@@ -152,11 +107,11 @@ export function CouplePage() {
           filter: `id=eq.${profile.partner_id}`,
         },
         async (payload) => {
-          const updatedPartner = payload.new as { name: string; avatar_url: string | null; couple_alias: string | null };
+          const updatedPartner = payload.new as { name: string; avatar_url: string | null };
           setPartner(
             updatedPartner.name || 'Pareja',
             updatedPartner.avatar_url || null,
-            updatedPartner.couple_alias
+            profile?.partner_alias || null
           );
         }
       )
@@ -203,6 +158,19 @@ export function CouplePage() {
     if (!profile) return;
     setGenerating(true);
     setError('');
+
+    const { data: currentProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, partner_id')
+      .eq('id', profile.id)
+      .maybeSingle();
+
+    if (profileError || !currentProfile) {
+      setError('No encontramos tu perfil. Cierra sesion e inicia de nuevo.');
+      setGenerating(false);
+      return;
+    }
+
     const result = await generateCoupleLink(profile.id);
     if (result.code) {
       setCoupleCode(result.code);
@@ -231,7 +199,6 @@ export function CouplePage() {
         name: result.name,
         avatar: result.avatar,
         id: result.partnerId,
-        couple_alias: (result as any).couple_alias || null,
       });
     } else {
       setError(result.error || 'Código inválido');
@@ -246,7 +213,7 @@ export function CouplePage() {
     const result = await linkWithCode(profile.id, linkCode);
     if (result.success) {
       setLinked(true);
-      setPartner(partnerPreview.name, partnerPreview.avatar, partnerPreview.couple_alias);
+      setPartner(partnerPreview.name, partnerPreview.avatar, profile?.partner_alias || null);
       setPartnerPreview(null);
     } else {
       setError(result.error || 'Error al vincular');
@@ -267,25 +234,24 @@ export function CouplePage() {
         .from('profiles')
         .select('partner_id')
         .eq('id', profile.id)
-        .single();
+        .maybeSingle();
       if (profErr || !myProfile?.partner_id) return;
 
       clearInterval(pollingRef.current!);
 
       const { data: rawPartner } = await supabase
-        .rpc('get_partner_info', { partner_id: myProfile.partner_id })
-        .single();
+        .rpc('get_partner_info', { v_partner_id: myProfile.partner_id })
+        .maybeSingle();
       const partnerData = rawPartner as {
         name: string;
         avatar_url: string | null;
-        couple_alias: string | null;
       } | null;
 
       setLinked(true);
       setPartner(
         partnerData?.name || 'Pareja',
         partnerData?.avatar_url || null,
-        partnerData?.couple_alias
+        profile?.partner_alias || null
       );
     }, 5000);
 
@@ -357,6 +323,14 @@ export function CouplePage() {
       className="space-y-6 max-w-2xl mx-auto pb-10"
     >
       <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="mr-1 flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 text-gray-600 transition hover:bg-gray-50 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800"
+          aria-label="Volver"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
         <Heart className="w-6 h-6 text-pink-600 animate-pulse" />
         Pareja
       </h2>
@@ -391,7 +365,7 @@ export function CouplePage() {
 
               <div>
                 <h3 className="text-xl font-bold">
-                  {profile?.couple_alias || profile?.name} &amp; {partnerAlias || partnerName || 'Pareja'}
+                  {profile?.name} &amp; {partnerAlias || partnerName || 'Pareja'}
                 </h3>
                 <p className="text-purple-200 text-xs font-medium mt-1">
                   {details ? calculateTimeConnected(details.created_at) : 'Conectados'}
@@ -427,80 +401,59 @@ export function CouplePage() {
             </div>
           </div>
 
-          {/* Alias Config Section */}
+          {/* Partner Alias Section */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 space-y-4">
             <h3 className="text-md font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-amber-500" />
-              Apodos en la Pareja
+              Alias para tu pareja
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Personalicen cómo desean verse el uno al otro en la pantalla principal.
+              Así se mostrará tu pareja en movimientos y en la pantalla principal.
             </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {!isEditingAlias && profile?.couple_alias ? (
-                <div className="bg-gray-50 dark:bg-gray-800/40 p-4 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500 font-medium">Mi nombre de pareja</p>
-                    <p className="text-md font-bold text-pink-700 dark:text-pink-300 mt-1">
-                      {profile.couple_alias}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setAliasInput(profile.couple_alias || '');
-                      setIsEditingAlias(true);
-                    }}
-                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
+            <div className="space-y-3">
+              <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold">
+                  {partnerName?.[0] || 'P'}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="text-xs text-gray-600 dark:text-gray-400 font-semibold block">Mi nombre de pareja</label>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Ej. mi amor, osito..."
-                      value={aliasInput}
-                      onChange={handleAliasChange}
-                      maxLength={8}
-                      className="flex-1"
-                    />
-                    <Button
-                      onClick={saveAlias}
-                      loading={aliasSaving}
-                      disabled={aliasInput === (profile?.couple_alias || '') || aliasError !== ''}
-                      size="sm"
-                    >
-                      Guardar
-                    </Button>
-                    {profile?.couple_alias && (
-                      <Button
-                        onClick={() => setIsEditingAlias(false)}
-                        variant="secondary"
-                        size="sm"
-                      >
-                        Cancelar
-                      </Button>
-                    )}
-                  </div>
-                  {aliasError && <p className="text-[10px] text-red-500 font-medium">{aliasError}</p>}
-                  <p className="text-[9px] text-gray-400">Máx. 2 palabras y 8 caracteres.</p>
-                </div>
-              )}
-
-              <div className="bg-gray-50 dark:bg-gray-800/40 p-4 rounded-xl border border-gray-100 dark:border-gray-800 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500 font-medium">El apodo de mi pareja</p>
-                  <p className="text-md font-bold text-purple-700 dark:text-purple-300 mt-1">
-                    {partnerAlias || '(Ninguno establecido todavía)'}
+                  <p className="text-sm font-bold text-purple-700 dark:text-purple-300">
+                    {partnerAlias || partnerName || 'Pareja'}
                   </p>
-                </div>
-                <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                  <Heart className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <p className="text-xs text-purple-500">Nombre real: {partnerName || '—'}</p>
                 </div>
               </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ej. mi amor, osito..."
+                  value={aliasInput}
+                  onChange={(e) => setAliasInput(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={async () => {
+                    if (!profile) return;
+                    setAliasSaving(true);
+                    const val = aliasInput.trim() || null;
+                    const { error: err } = await supabase
+                      .from('profiles')
+                      .update({ partner_alias: val })
+                      .eq('id', profile.id);
+                    if (!err) {
+                      updateProfile({ partner_alias: val });
+                      setPartner(partnerName || 'Pareja', null, aliasInput.trim());
+                    } else {
+                      console.error('Error saving alias:', err);
+                    }
+                    setAliasSaving(false);
+                  }}
+                  loading={aliasSaving}
+                  disabled={aliasInput === (profile?.partner_alias || '')}
+                  size="sm"
+                >
+                  Guardar
+                </Button>
+              </div>
+              <p className="text-[10px] text-gray-400">Déjalo vacío para usar el nombre real.</p>
             </div>
           </div>
 
@@ -578,6 +531,9 @@ export function CouplePage() {
               </div>
             )}
           </div>
+
+          {/* Joint Account Name Section */}
+          {profile && <JointAccountNameSection userId={profile.id} />}
 
           {/* Quick Actions / Navigation */}
           <div className="flex gap-4">
@@ -701,6 +657,293 @@ export function CouplePage() {
           </div>
         </div>
       )}
+    </motion.div>
+  );
+}
+
+function JointAccountNameSection({ userId }: { userId: string }) {
+  const navigate = useNavigate();
+  const { profile } = useProfileStore();
+  const [jointAcc, setJointAcc] = useState<{ id: string; name: string } | null>(null);
+  const [pendingRequest, setPendingRequest] = useState<{
+    id: string;
+    requester_id: string;
+    proposed_name: string;
+    created_at: string;
+  } | null>(null);
+  const [newName, setNewName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [celebrating, setCelebrating] = useState(false);
+
+  const load = async () => {
+    const acc = await getJointAccount(userId);
+    if (acc) {
+      setJointAcc({ id: acc.id, name: acc.account_name || 'Nuestra cuenta' });
+      const pending = await getPendingNameChange(acc.id);
+      if (pending) {
+        setPendingRequest({
+          id: pending.id,
+          requester_id: pending.requester_id,
+          proposed_name: pending.proposed_name,
+          created_at: pending.created_at,
+        });
+      } else {
+        setPendingRequest(null);
+      }
+    }
+  };
+
+  useEffect(() => { load(); }, [userId]);
+
+  useEffect(() => {
+    if (!jointAcc?.id) return;
+    const channel = supabase
+      .channel('name-change-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'name_change_requests',
+          filter: `joint_account_id=eq.${jointAcc.id}`,
+        },
+        () => { load(); }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'joint_accounts',
+          filter: `id=eq.${jointAcc.id}`,
+        },
+        () => { load(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [jointAcc?.id]);
+
+  const handlePropose = async () => {
+    if (!jointAcc || !newName.trim()) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    const result = await proposeNameChange(jointAcc.id, newName.trim());
+    if (result.success) {
+      setSuccess('Solicitud enviada');
+      setNewName('');
+      load();
+    } else {
+      setError(result.error || 'Error al enviar solicitud');
+    }
+    setLoading(false);
+  };
+
+  const handleRespond = async (accept: boolean) => {
+    if (!pendingRequest) return;
+    setLoading(true);
+    setError('');
+    const result = await respondNameChange(pendingRequest.id, accept);
+    if (result.success) {
+      if (accept) {
+        setCelebrating(true);
+        setTimeout(() => navigate('/'), 1800);
+      } else {
+        setSuccess('Solicitud rechazada');
+        load();
+      }
+    } else {
+      setError(result.error || 'Error al responder');
+    }
+    setLoading(false);
+  };
+
+  if (!jointAcc) return null;
+
+  const myId = profile?.id;
+  const isMyRequest = pendingRequest?.requester_id === myId;
+
+  return (
+    <motion.div
+      layout
+      className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800 space-y-4"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-md font-bold text-gray-900 dark:text-white flex items-center gap-2">
+          <Edit3 className="w-5 h-5 text-purple-600" />
+          Nombre de la cuenta
+        </h3>
+      </div>
+
+      <motion.div
+        layout
+        className="flex items-center gap-3 p-4 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border border-purple-100 dark:border-purple-900"
+      >
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+          {jointAcc.name.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Nombre actual</p>
+          <motion.p
+            key={jointAcc.name}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-sm font-bold text-purple-700 dark:text-purple-300"
+          >
+            {jointAcc.name}
+          </motion.p>
+        </div>
+      </motion.div>
+
+      <AnimatePresence mode="wait">
+        {error && (
+          <motion.div
+            key="error"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            </div>
+          </motion.div>
+        )}
+
+        {success && !celebrating && (
+          <motion.div
+            key="success"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="p-3 rounded-xl bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-900 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+              <p className="text-sm text-green-600 dark:text-green-400">{success}</p>
+            </div>
+          </motion.div>
+        )}
+
+        {celebrating && (
+          <motion.div
+            key="celebrate"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="text-center py-6"
+          >
+            <motion.div
+              animate={{ rotate: [0, -10, 10, -10, 0] }}
+              transition={{ duration: 0.6, repeat: Infinity }}
+              className="inline-block"
+            >
+              <PartyPopper className="w-12 h-12 text-purple-600 mx-auto mb-2" />
+            </motion.div>
+            <p className="text-lg font-bold text-purple-700 dark:text-purple-300">
+              ¡Nombre cambiado!
+            </p>
+            <p className="text-sm text-gray-500 mt-1">Redirigiendo al inicio...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence mode="wait">
+        {!celebrating && pendingRequest ? (
+          <motion.div
+            key="pending"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-3"
+          >
+            {isMyRequest ? (
+              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-8 h-8 rounded-full bg-amber-200 dark:bg-amber-800 flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-amber-700 dark:text-amber-300" />
+                  </div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Esperando respuesta</p>
+                </div>
+                <p className="text-sm text-amber-700 dark:text-amber-400 ml-11">
+                  Sugeriste <strong className="text-amber-900 dark:text-amber-200">"{pendingRequest.proposed_name}"</strong>
+                </p>
+              </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-3"
+              >
+                <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 border border-purple-200 dark:border-purple-900">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-full bg-purple-200 dark:bg-purple-800 flex items-center justify-center">
+                      <Heart className="w-4 h-4 text-purple-700 dark:text-purple-300" />
+                    </div>
+                    <p className="text-sm font-semibold text-purple-800 dark:text-purple-300">¡Tu pareja tiene una idea!</p>
+                  </div>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 ml-11">
+                    Quiere llamar la cuenta <strong className="text-purple-700 dark:text-purple-300">"{pendingRequest.proposed_name}"</strong>
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={() => handleRespond(false)}
+                    loading={loading}
+                  >
+                    <XCircle className="w-4 h-4" /> Rechazar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                    onClick={() => handleRespond(true)}
+                    loading={loading}
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Aceptar
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        ) : null}
+
+        {!celebrating && !pendingRequest && (
+          <motion.div
+            key="propose"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-3"
+          >
+            <div className="flex gap-2">
+              <Input
+                placeholder="Nuevo nombre..."
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                size="sm"
+                onClick={handlePropose}
+                loading={loading}
+                disabled={!newName.trim()}
+              >
+                <SendHorizonal className="w-4 h-4" /> Enviar
+              </Button>
+            </div>
+            <p className="text-[10px] text-gray-400 flex items-center gap-1">
+              <Heart className="w-3 h-3 text-pink-400" />
+              Se enviará una solicitud a tu pareja
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

@@ -1,4 +1,4 @@
-export { signUpWithPhone, signInWithPhone, signOut, sendOTP, verifyOTP } from './authService';
+export { signUp, signIn, signOut, resetPassword } from './authService';
 export { getProfile, updateProfile, uploadAvatar } from './profileService';
 export { getMovements, createMovement, getBalance } from './movementService';
 export { getDebts, createDebt, payInstallment } from './debtService';
