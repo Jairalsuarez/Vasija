@@ -26,12 +26,14 @@ interface ProfileState {
   isOnboarded: boolean;
   hasUsedBefore: boolean;
   sessionReady: boolean;
+  isEntering: boolean;
   setProfile: (profile: UserProfile) => void;
   updateProfile: (updates: Partial<UserProfile>) => void;
   setAuthenticated: (v: boolean) => void;
   setOnboarded: (v: boolean) => void;
   markUsedBefore: () => void;
   setSessionReady: (v: boolean) => void;
+  setEntering: (v: boolean) => void;
   logout: () => void;
 }
 
@@ -43,6 +45,7 @@ export const useProfileStore = create<ProfileState>()(
       isOnboarded: false,
       hasUsedBefore: false,
       sessionReady: false,
+      isEntering: false,
       setProfile: (profile) => set({ profile, isAuthenticated: true }),
       updateProfile: (updates) =>
         set((state) => ({
@@ -52,11 +55,14 @@ export const useProfileStore = create<ProfileState>()(
       setOnboarded: (v) => set({ isOnboarded: v }),
       markUsedBefore: () => set({ hasUsedBefore: true }),
       setSessionReady: (v) => set({ sessionReady: v }),
+      setEntering: (v) => set({ isEntering: v }),
       logout: () => set({
         profile: null,
         isAuthenticated: false,
         isOnboarded: false,
+        hasUsedBefore: true,
         sessionReady: true,
+        isEntering: false,
       }),
     }),
     {

@@ -1,6 +1,5 @@
 ﻿import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { signIn } from '../services/authService';
@@ -16,8 +15,6 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { setProfile } = useProfileStore();
-  const navigate = useNavigate();
 
   const handleLogin = async () => {
     if (!email || !password) return;
@@ -30,8 +27,8 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
       return;
     }
     if (user) {
-      setProfile(user);
-      navigate('/dashboard');
+      useProfileStore.setState({ isEntering: true, profile: user, isAuthenticated: true });
+      sessionStorage.setItem('vasija:skip-auth-splash', '1');
     }
     setLoading(false);
   };
@@ -63,7 +60,7 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
           className="w-full"
         >
           <div className="auth-card">
@@ -71,7 +68,7 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
               <motion.div
                 initial={{ scale: 0.7, opacity: 0, rotate: -15 }}
                 animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
                 className="mb-3 flex items-center justify-center"
               >
                 <img
@@ -83,7 +80,7 @@ export function LoginPage({ onSwitchToRegister }: LoginPageProps) {
               <motion.h1
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15, duration: 0.4 }}
+                transition={{ delay: 0.12, duration: 0.25 }}
                 className="text-2xl font-extrabold text-gray-900 dark:text-white tracking-tight"
               >
                 Vasija

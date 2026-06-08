@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Bell, Moon, Sun, Monitor, LogOut, Church, Edit3 } from 'lucide-react';
+import { Bell, Moon, Sun, Monitor, LogOut, Edit3 } from 'lucide-react';
 import { useProfileStore, useUIStore, useCoupleStore, useFinanceStore } from '../store';
 import { Switch } from '../components/ui/Switch';
 import { Button } from '../components/ui/Button';
@@ -9,12 +9,13 @@ import { Input } from '../components/ui/Input';
 import { supabase } from '../lib/supabase';
 import { signOut } from '../services/authService';
 import type { Gender } from '../types';
+import { VasijaLoader } from '../components/onboarding/VasijaLoader';
 
 export function SettingsPage() {
   const { profile, logout, updateProfile } = useProfileStore();
   const { resetCouple } = useCoupleStore();
   const { resetFinance } = useFinanceStore();
-  const { theme, setTheme, autoTithe, setAutoTithe } = useUIStore();
+  const { theme, setTheme } = useUIStore();
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -49,7 +50,7 @@ export function SettingsPage() {
     setAccountNameError('');
 
     if (!accountNameInput.trim()) {
-      setAccountNameError('El nombre no puede estar vacío');
+      setAccountNameError('El nombre no puede estar vacÃ­o');
       setAccountNameSaving(false);
       return;
     }
@@ -75,22 +76,32 @@ export function SettingsPage() {
 
   const handleLogout = async () => {
     setLoggingOut(true);
+  };
+
+  const completeLogout = () => {
+    sessionStorage.setItem('vasija:skip-auth-splash', '1');
     resetCouple();
     resetFinance();
     logout();
     navigate('/', { replace: true });
-    const { error } = await signOut();
-    if (error) console.warn('Supabase sign out failed:', error);
-    setLoggingOut(false);
+    signOut().then(({ error }) => {
+      if (error) console.warn('Supabase sign out failed:', error);
+    });
   };
 
   return (
+    <>
+    {loggingOut && (
+      <div className="fixed inset-0 z-[1200]">
+        <VasijaLoader variant="logout" onFinish={completeLogout} />
+      </div>
+    )}
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-5 max-w-lg"
     >
-      <h2 className="text-xl font-bold text-gray-900 dark:text-white">Configuración</h2>
+      <h2 className="text-xl font-bold text-gray-900 dark:text-white">ConfiguraciÃ³n</h2>
 
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="p-5 flex items-center gap-4 border-b border-gray-100 dark:border-gray-800">
@@ -197,22 +208,11 @@ export function SettingsPage() {
             </div>
           </div>
 
-          <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-              <Church className="w-4 h-4" /> Iglesia
-            </h4>
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-sm text-gray-600 dark:text-gray-400 block font-medium">Diezmo Automático (10%)</span>
-              </div>
-              <Switch checked={autoTithe} onChange={setAutoTithe} />
-            </div>
-          </div>
 
           {profile?.partner_id && (
             <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
               <p className="text-xs text-gray-400 text-center">
-                Configura el alias de tu pareja en la sección <strong>Pareja</strong>
+                Configura el alias de tu pareja en la secciÃ³n <strong>Pareja</strong>
               </p>
             </div>
           )}
@@ -220,8 +220,9 @@ export function SettingsPage() {
       </div>
 
       <Button variant="danger" onClick={handleLogout} loading={loggingOut} className="w-full">
-        <LogOut className="w-4 h-4" /> Cerrar sesión
+        <LogOut className="w-4 h-4" /> Cerrar sesiÃ³n
       </Button>
     </motion.div>
+    </>
   );
 }

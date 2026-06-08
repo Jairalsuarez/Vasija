@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -13,13 +13,15 @@ import {
   Users,
   Clock3,
 } from 'lucide-react';
-import { useProfileStore, useCoupleStore } from '../store';
+import { useProfileStore, useCoupleStore, useFinanceStore } from '../store';
 import { Button } from '../components/ui/Button';
+import { MinimalActionToast } from '../components/ui/MinimalActionToast';
 import { supabase } from '../lib/supabase';
 import { getBalance } from '../services/movementService';
-import { getJointAccount } from '../services/jointAccountService';
+import { getJointAccount, updateJointAccountTheme } from '../services/jointAccountService';
 import { proposeNameChange, respondNameChange, getPendingNameChange } from '../services/nameChangeService';
 import { useAppTheme } from '../hooks/useAppTheme';
+import { getThemeColor, JOINT_ACCOUNT_THEMES } from '../config/themes';
 import { formatCurrency } from '../lib/formatters';
 import type { Gender } from '../types';
 
@@ -37,6 +39,15 @@ export function AccountSettingsPage() {
   const [searchParams] = useSearchParams();
   const { profile, updateProfile } = useProfileStore();
   const { isLinked, partnerName, partnerAlias, viewMode, setViewMode } = useCoupleStore();
+  const {
+    balance: cachedPersonalBalance,
+    jointBalance: cachedJointBalance,
+    jointAccountId,
+    jointAccountName,
+    jointAccountTheme,
+    setJointAccountMeta,
+    setJointBalance,
+  } = useFinanceStore();
   const appTheme = useAppTheme();
 
   const requestedMode = searchParams.get('type') as AccountMode | null;
@@ -45,11 +56,20 @@ export function AccountSettingsPage() {
   const [activeEditor, setActiveEditor] = useState<Editor>(focus === 'name-request' ? 'name' : null);
 
   const [accountName, setAccountName] = useState(profile?.account_name || profile?.name || '');
-  const [personalBalance, setPersonalBalance] = useState(0);
+  const [personalBalance, setPersonalBalance] = useState(cachedPersonalBalance);
   const [savingPersonal, setSavingPersonal] = useState(false);
   const [savingTheme, setSavingTheme] = useState(false);
 
-  const [jointAcc, setJointAcc] = useState<{ id: string; balance: number; name: string; theme: string } | null>(null);
+  const [jointAcc, setJointAcc] = useState<{ id: string; balance: number; name: string; theme: string } | null>(
+    jointAccountId
+      ? {
+          id: jointAccountId,
+          balance: cachedJointBalance,
+          name: jointAccountName,
+          theme: jointAccountTheme,
+        }
+      : null,
+  );
   const [pendingRequest, setPendingRequest] = useState<{
     id: string;
     requester_id: string;
@@ -58,21 +78,24 @@ export function AccountSettingsPage() {
   } | null>(null);
   const [newJointName, setNewJointName] = useState('');
   const [savingJoint, setSavingJoint] = useState(false);
+  const [savingJointTheme, setSavingJointTheme] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [toast, setToast] = useState('');
+  const [waitingTipOpen, setWaitingTipOpen] = useState(false);
 
   const myId = profile?.id;
   const isMyRequest = pendingRequest?.requester_id === myId;
   const nameWaiting = activeMode === 'joint' && !!pendingRequest && isMyRequest;
   const partnerLabel = partnerAlias || partnerName || 'Pareja';
+  const jointThemeColor = getThemeColor(jointAcc?.theme);
 
   const accountView = useMemo(() => {
     if (activeMode === 'joint' && jointAcc) {
       const liveJointName =
-        activeEditor === 'name' && !pendingRequest && newJointName.trim()
-          ? newJointName
-          : pendingRequest
-            ? pendingRequest.proposed_name
+        pendingRequest && !isMyRequest
+          ? pendingRequest.proposed_name
+          : activeEditor === 'name' && !pendingRequest && newJointName.trim()
+            ? newJointName
             : jointAcc.name;
 
       return {
@@ -81,8 +104,9 @@ export function AccountSettingsPage() {
         name: liveJointName,
         balance: jointAcc.balance,
         cardClass: 'text-white',
-        cardStyle: { background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` },
-        accentClass: 'bg-white/15',
+        cardStyle: { background: jointThemeColor.color },
+        accentClass: '',
+        accentStyle: { backgroundColor: jointThemeColor.accentColor },
       };
     }
 
@@ -94,19 +118,24 @@ export function AccountSettingsPage() {
       cardClass: 'text-white',
       cardStyle: { background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` },
       accentClass: 'bg-white/15',
+      accentStyle: undefined,
     };
-  }, [activeEditor, activeMode, accountName, appTheme.primary, appTheme.secondary, isMyRequest, jointAcc, newJointName, partnerLabel, pendingRequest, personalBalance, profile]);
+  }, [activeEditor, activeMode, accountName, appTheme.primary, appTheme.secondary, isMyRequest, jointAcc, jointThemeColor.accentColor, jointThemeColor.color, newJointName, partnerLabel, pendingRequest, personalBalance, profile]);
 
-  const loadJoint = async () => {
+  const loadJoint = useCallback(async () => {
     if (!profile || !isLinked) return;
     const acc = await getJointAccount(profile.id);
     if (!acc?.id) return;
+    const nextName = acc.account_name || 'Nuestra cuenta';
+    const nextTheme = acc.theme || 'purple';
     setJointAcc({
       id: acc.id,
       balance: acc.balance,
-      name: acc.account_name || 'Nuestra cuenta',
-      theme: acc.theme || 'purple',
+      name: nextName,
+      theme: nextTheme,
     });
+    setJointBalance(acc.balance);
+    setJointAccountMeta({ id: acc.id, name: nextName, theme: nextTheme });
     const pending = await getPendingNameChange(acc.id);
     setPendingRequest(
       pending
@@ -118,10 +147,11 @@ export function AccountSettingsPage() {
           }
         : null,
     );
-  };
+  }, [isLinked, profile, setJointAccountMeta, setJointBalance]);
 
   useEffect(() => {
-    setAccountName(profile?.account_name || profile?.name || '');
+    const timer = window.setTimeout(() => setAccountName(profile?.account_name || profile?.name || ''), 0);
+    return () => window.clearTimeout(timer);
   }, [profile?.account_name, profile?.name]);
 
   useEffect(() => {
@@ -130,8 +160,68 @@ export function AccountSettingsPage() {
   }, [profile?.id]);
 
   useEffect(() => {
-    void loadJoint();
-  }, [profile?.id, isLinked]);
+    void Promise.resolve().then(loadJoint);
+  }, [profile?.id, isLinked, loadJoint]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(''), 3500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!jointAcc?.id) return;
+    const channel = supabase
+      .channel(`account-settings-${jointAcc.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'joint_accounts', filter: `id=eq.${jointAcc.id}` },
+        (payload) => {
+          const row = payload.new as { id: string; balance?: number; account_name?: string | null; theme?: string | null };
+          const nextName = row.account_name || 'Nuestra cuenta';
+          const nextTheme = row.theme || 'purple';
+          setJointAcc((current) =>
+            current
+              ? {
+                  ...current,
+                  balance: Number(row.balance ?? current.balance),
+                  name: nextName,
+                  theme: nextTheme,
+                }
+              : current,
+          );
+          if (typeof row.balance === 'number') setJointBalance(row.balance);
+          setJointAccountMeta({ id: row.id, name: nextName, theme: nextTheme });
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'name_change_requests', filter: `joint_account_id=eq.${jointAcc.id}` },
+        async (payload) => {
+          const row = payload.new as { id?: string; requester_id?: string; proposed_name?: string; created_at?: string; status?: string } | null;
+          if (row?.status === 'pending' && row.id && row.requester_id && row.proposed_name && row.created_at) {
+            setPendingRequest({
+              id: row.id,
+              requester_id: row.requester_id,
+              proposed_name: row.proposed_name,
+              created_at: row.created_at,
+            });
+            return;
+          }
+          setPendingRequest(null);
+          setWaitingTipOpen(false);
+          if (row?.status === 'accepted') {
+            await loadJoint();
+            navigate('/dashboard');
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [jointAcc?.id, loadJoint, navigate, setJointAccountMeta, setJointBalance]);
 
   useEffect(() => {
     if (requestedMode === 'joint' && isLinked) setViewMode('couple');
@@ -139,19 +229,22 @@ export function AccountSettingsPage() {
   }, [requestedMode, isLinked, setViewMode]);
 
   useEffect(() => {
-    if (focus === 'name-request') setActiveEditor('name');
+    if (focus !== 'name-request') return;
+    const timer = window.setTimeout(() => setActiveEditor('name'), 0);
+    return () => window.clearTimeout(timer);
   }, [focus]);
 
   const savePersonalName = async () => {
     if (!profile || !accountName.trim()) return;
     setSavingPersonal(true);
     setError('');
-    setSuccess('');
     const cleanName = accountName.trim();
     const { error: err } = await supabase.from('profiles').update({ account_name: cleanName }).eq('id', profile.id);
     if (!err) {
       updateProfile({ account_name: cleanName });
-      setSuccess('Nombre actualizado.');
+      setActiveEditor(null);
+      setToast('El nombre de tu cuenta fue actualizado');
+      window.setTimeout(() => navigate('/dashboard'), 3820);
     } else {
       setError(err.message);
     }
@@ -166,15 +259,29 @@ export function AccountSettingsPage() {
     setSavingTheme(false);
   };
 
+  const handleJointTheme = async (themeId: string) => {
+    if (!jointAcc) return;
+    setSavingJointTheme(true);
+    setError('');
+    const result = await updateJointAccountTheme(jointAcc.id, themeId);
+    if (result.success) {
+      setJointAcc({ ...jointAcc, theme: themeId });
+      setJointAccountMeta({ id: jointAcc.id, theme: themeId });
+      setActiveEditor(null);
+    } else {
+      setError(result.error || 'No se pudo cambiar el color.');
+    }
+    setSavingJointTheme(false);
+  };
+
   const handlePropose = async () => {
     if (!jointAcc || !newJointName.trim()) return;
     setSavingJoint(true);
     setError('');
-    setSuccess('');
     const result = await proposeNameChange(jointAcc.id, newJointName.trim());
     if (result.success) {
-      setSuccess('Solicitud enviada.');
       setNewJointName('');
+      setActiveEditor(null);
       await loadJoint();
     } else {
       setError(result.error || 'No se pudo enviar la solicitud.');
@@ -186,11 +293,11 @@ export function AccountSettingsPage() {
     if (!pendingRequest) return;
     setSavingJoint(true);
     setError('');
-    setSuccess('');
     const result = await respondNameChange(pendingRequest.id, accept);
     if (result.success) {
       setActiveEditor(null);
       await loadJoint();
+      if (accept) navigate('/dashboard');
     } else {
       setError(result.error || 'No se pudo responder.');
     }
@@ -199,18 +306,25 @@ export function AccountSettingsPage() {
 
   const openNameEditor = () => {
     if (activeEditor === 'name') {
-      setActiveEditor(null);
+      cancelNameEdit();
       return;
     }
     if (activeMode === 'joint' && jointAcc && !pendingRequest) setNewJointName(jointAcc.name);
     setActiveEditor('name');
   };
 
+  const cancelNameEdit = () => {
+    setAccountName(profile?.account_name || profile?.name || '');
+    setNewJointName(jointAcc?.name || '');
+    setActiveEditor(null);
+    setError('');
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
       className="mx-auto max-w-lg space-y-5"
     >
       <div className="flex items-center gap-3">
@@ -228,8 +342,8 @@ export function AccountSettingsPage() {
         className={`relative overflow-hidden rounded-3xl p-5 shadow-xl shadow-gray-900/10 ${accountView.cardClass}`}
         style={accountView.cardStyle}
       >
-        <div className={`absolute -right-8 -top-10 h-28 w-28 rounded-full ${accountView.accentClass}`} />
-        <div className={`absolute -bottom-10 -left-8 h-24 w-24 rounded-full ${accountView.accentClass}`} />
+        <div className={`absolute -right-8 -top-10 h-28 w-28 rounded-full ${accountView.accentClass}`} style={accountView.accentStyle} />
+        <div className={`absolute -bottom-10 -left-8 h-24 w-24 rounded-full ${accountView.accentClass}`} style={accountView.accentStyle} />
         <div className="relative flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="mb-4 flex items-center gap-2 text-white/90">
@@ -260,7 +374,13 @@ export function AccountSettingsPage() {
                   </button>
                 </div>
               ) : activeEditor === 'name' && (activeMode === 'personal' || !pendingRequest) ? (
-                <div className="flex min-w-0 flex-1 items-center gap-2">
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  className="flex min-w-0 flex-1 items-center gap-2"
+                >
                   <input
                     value={activeMode === 'personal' ? accountName : newJointName}
                     onChange={(e) => (activeMode === 'personal' ? setAccountName(e.target.value) : setNewJointName(e.target.value))}
@@ -269,6 +389,7 @@ export function AccountSettingsPage() {
                         if (activeMode === 'personal') void savePersonalName();
                         else void handlePropose();
                       }
+                      if (e.key === 'Escape') cancelNameEdit();
                     }}
                     autoFocus
                     className="min-w-0 flex-1 rounded-xl border border-white/20 bg-white/15 px-3 py-2 text-xl font-black text-white outline-none placeholder:text-white/60 focus:border-white/60"
@@ -286,15 +407,42 @@ export function AccountSettingsPage() {
                   >
                     {activeMode === 'personal' ? <Save className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                   </button>
-                </div>
+                  <button
+                    type="button"
+                    onClick={cancelNameEdit}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
+                    aria-label="Cancelar edicion"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </motion.div>
               ) : (
                 <h3 className="truncate text-2xl font-black">{accountView.name}</h3>
               )}
               {pendingRequest && !isMyRequest ? null : nameWaiting ? (
-                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15" aria-label="Esperando respuesta">
-                  <Clock3 className="h-4 w-4 animate-pulse" />
+                <span className="relative inline-flex">
+                  <button
+                    type="button"
+                    onClick={() => setWaitingTipOpen((value) => !value)}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
+                    aria-label="Esperando respuesta"
+                  >
+                    <Clock3 className="h-4 w-4 animate-spin [animation-duration:1.7s]" />
+                  </button>
+                  <AnimatePresence>
+                    {waitingTipOpen && (
+                      <motion.span
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                        className="absolute bottom-full left-1/2 z-20 mb-3 w-56 -translate-x-1/2 rounded-2xl bg-gray-950/95 px-3 py-2 text-center text-xs font-bold leading-snug text-white shadow-2xl"
+                      >
+                        Esperando a que &lsquo;{partnerLabel}&rsquo; acepte el cambio.
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
                 </span>
-              ) : (
+              ) : activeEditor === 'name' ? null : (
                 <button
                   type="button"
                   onClick={openNameEditor}
@@ -308,42 +456,24 @@ export function AccountSettingsPage() {
             <p className="mt-4 text-3xl font-black">{formatCurrency(Number(accountView.balance || 0))}</p>
           </div>
           <div className="flex flex-col gap-2">
-            {pendingRequest && !isMyRequest ? null : nameWaiting ? (
-              <button
-                type="button"
-                onClick={() => setActiveEditor(activeEditor === 'name' ? null : 'name')}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
-                aria-label="Ver solicitud pendiente"
-              >
-                <Clock3 className="h-4 w-4 animate-pulse" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={openNameEditor}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
-                aria-label="Editar nombre"
-              >
-                <Edit3 className="h-4 w-4" />
-              </button>
-            )}
-            {activeMode === 'personal' && (
-              <button
-                type="button"
-                onClick={() => setActiveEditor(activeEditor === 'color' ? null : 'color')}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
-                aria-label="Editar color"
-              >
-                <Palette className="h-5 w-5" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setActiveEditor(activeEditor === 'color' ? null : 'color')}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 transition-all hover:bg-white/25 active:scale-95"
+              aria-label="Editar color"
+            >
+              <Palette className="h-5 w-5" />
+            </button>
           </div>
         </div>
       </section>
 
+      <MinimalActionToast open={!!toast} message={toast} tone="success" onDismiss={() => setToast('')} />
+
       {activeEditor === 'color' && (
         <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-sm dark:border-gray-800 dark:bg-[var(--theme-card-bg)]">
-          {personalThemeOptions.map((option) => {
+          {activeMode === 'personal'
+            ? personalThemeOptions.map((option) => {
                 const active = profile?.gender === option.gender;
                 return (
                   <button
@@ -359,19 +489,33 @@ export function AccountSettingsPage() {
                     <span className="block h-7 w-7 rounded-full" style={{ backgroundColor: option.color }} />
                   </button>
                 );
+              })
+            : JOINT_ACCOUNT_THEMES.map((theme) => {
+                const active = jointAcc?.theme === theme.id;
+                const swatch = getThemeColor(theme.id);
+                return (
+                  <button
+                    key={theme.id}
+                    type="button"
+                    disabled={savingJointTheme}
+                    onClick={() => handleJointTheme(theme.id)}
+                    className={`flex h-11 min-w-11 items-center justify-center rounded-full border transition-all ${
+                      active ? 'border-gray-900 bg-gray-50 dark:border-white dark:bg-gray-950' : 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950'
+                    } disabled:opacity-80`}
+                    aria-label={theme.label}
+                  >
+                    <span className="block h-7 w-7 rounded-full" style={{ backgroundColor: swatch.color }} />
+                  </button>
+                );
               })}
         </div>
       )}
 
-      {(error || success) && (
+      {error && (
         <div
-          className={`rounded-2xl border p-3 text-sm font-bold ${
-            error
-              ? 'border-red-100 bg-red-50 text-red-600 dark:border-red-950 dark:bg-red-950/25 dark:text-red-300'
-              : 'border-green-100 bg-green-50 text-green-700 dark:border-green-950 dark:bg-green-950/25 dark:text-green-300'
-          }`}
+          className="rounded-2xl border border-red-100 bg-red-50 p-3 text-sm font-bold text-red-600 dark:border-red-950 dark:bg-red-950/25 dark:text-red-300"
         >
-          {error || success}
+          {error}
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 import { signOut } from '../../services/authService';
 import { useProfileStore, useUIStore, useCoupleStore, useFinanceStore } from '../../store';
+import { VasijaLoader } from '../onboarding/VasijaLoader';
 
 export function UserMenu() {
   const { userMenuOpen, closeUserMenu } = useUIStore();
@@ -15,15 +17,22 @@ export function UserMenu() {
   const { resetCouple } = useCoupleStore();
   const { resetFinance } = useFinanceStore();
   const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     closeUserMenu();
+    setLoggingOut(true);
+  };
+
+  const completeLogout = () => {
+    sessionStorage.setItem('vasija:skip-auth-splash', '1');
     resetCouple();
     resetFinance();
     logout();
     navigate('/', { replace: true });
-    const { error } = await signOut();
-    if (error) console.warn('Supabase sign out failed:', error);
+    signOut().then(({ error }) => {
+      if (error) console.warn('Supabase sign out failed:', error);
+    });
   };
 
   const items = [
@@ -34,6 +43,11 @@ export function UserMenu() {
 
   return (
     <AnimatePresence>
+      {loggingOut && (
+        <div className="fixed inset-0 z-[1200]">
+          <VasijaLoader variant="logout" onFinish={completeLogout} />
+        </div>
+      )}
       {userMenuOpen && (
         <>
           <div
@@ -45,6 +59,7 @@ export function UserMenu() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.96 }}
             transition={{ duration: 0.15 }}
+            style={{ transformOrigin: 'top right' }}
             className="absolute right-4 top-16 z-50 w-56 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 overflow-hidden"
           >
             <div className="p-4 border-b border-gray-100 dark:border-gray-800">

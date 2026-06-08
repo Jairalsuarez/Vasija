@@ -37,7 +37,7 @@ export function ProfilePage() {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
       className="space-y-5 max-w-lg"
     >
       <h2 className="text-xl font-bold text-gray-900 dark:text-white">Perfil</h2>
@@ -45,14 +45,14 @@ export function ProfilePage() {
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ delay: 0.08, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
         className="bg-white dark:bg-gray-900 rounded-2xl p-6 border border-gray-200 dark:border-gray-800"
       >
         <div className="flex flex-col items-center mb-6">
           <motion.div
             className="relative"
             whileHover={{ scale: 1.05 }}
-            transition={{ duration: 0.2 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 15 }}
           >
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} className="w-20 h-20 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700" />
@@ -88,7 +88,7 @@ export function ProfilePage() {
             value={profile?.email || ''}
             disabled
           />
-          <motion.div whileTap={{ scale: 0.98 }}>
+          <motion.div whileTap={{ scale: 0.98 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
             <Button onClick={handleSave} loading={saving} className="w-full">
               <Save className="w-4 h-4" /> Guardar cambios
             </Button>

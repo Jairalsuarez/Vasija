@@ -57,8 +57,8 @@ export function ConfirmModal({
               <div className="flex flex-col items-center text-center mt-2">
                 {/* Beautiful Animated Icon */}
                 <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
                   className={`w-14 h-14 rounded-2xl ${iconBg} flex items-center justify-center mb-4`}
                 >

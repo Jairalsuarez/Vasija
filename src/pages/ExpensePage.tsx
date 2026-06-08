@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, BadgeDollarSign, Home, PiggyBank, Plus, Target, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/ui/Button';
@@ -8,7 +8,7 @@ import { useCoupleStore, useFinanceStore, useProfileStore } from '../store';
 import { createMovement } from '../services/movementService';
 import { getDebts } from '../services/debtService';
 import { getGoals } from '../services/goalService';
-import { getSavings } from '../services/savingService';
+import { contributeToSaving, getSavings } from '../services/savingService';
 import { formatCurrency } from '../lib/formatters';
 import type { Saving } from '../types';
 
@@ -25,6 +25,7 @@ const homeNiches = ['Arriendo', 'Comida', 'Luz', 'Agua', 'Internet', 'Mantenimie
 
 export function ExpensePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { profile } = useProfileStore();
   const { viewMode } = useCoupleStore();
   const { debts, goals, setDebts, setGoals } = useFinanceStore();
@@ -54,6 +55,13 @@ export function ExpensePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const preset = searchParams.get('section');
+    if (preset === 'savings') {
+      setSection(expenseSections.find((item) => item.name === 'Ahorro') || null);
+    }
+  }, [searchParams]);
 
   const sectionItems = useMemo(() => {
     if (!section) return [];
@@ -131,6 +139,10 @@ export function ExpensePage() {
       is_couple: isCouple,
     });
     if (movement) {
+      if (section?.name === 'Ahorro') {
+        const selectedSaving = savings.find((saving) => saving.name === niche);
+        if (selectedSaving) await contributeToSaving(selectedSaving.id, value);
+      }
       sessionStorage.setItem('vasija:balance-sound', 'expense');
       sessionStorage.setItem('vasija:balance-delta', String(value));
     }

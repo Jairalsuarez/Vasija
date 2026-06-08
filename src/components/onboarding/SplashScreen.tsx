@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { VasijaLoaderAnimation } from './VasijaLoaderAnimation';
+import { VasijaLoader } from './VasijaLoader';
 
 export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [showSkip, setShowSkip] = useState(false);
@@ -12,7 +12,7 @@ export function SplashScreen({ onFinish }: { onFinish: () => void }) {
         done.current = true;
         onFinish();
       }
-    }, 7100);
+    }, 4500);
 
     return () => {
       window.clearTimeout(skipTimer);
@@ -28,20 +28,17 @@ export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   };
 
   return (
-    <div className="auth-screen relative">
-      <div className="vasija-loader" role="status" aria-live="polite">
-        <VasijaLoaderAnimation />
-
-        {showSkip && (
-          <button
-            type="button"
-            onClick={finishNow}
-            className="mt-5 rounded-xl px-4 py-2 text-sm font-semibold text-gray-500 transition hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
-          >
-            Continuar
-          </button>
-        )}
-      </div>
+    <div className="relative">
+      <VasijaLoader variant="cold" />
+      {showSkip && (
+        <button
+          type="button"
+          onClick={finishNow}
+          className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-lg transition hover:bg-gray-50 dark:border-gray-800 dark:bg-[var(--theme-card-bg)] dark:text-gray-200 dark:hover:bg-[var(--theme-hover)]"
+        >
+          Continuar
+        </button>
+      )}
     </div>
   );
 }

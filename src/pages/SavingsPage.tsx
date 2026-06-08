@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { PiggyBank, Plus, Target, Wallet } from 'lucide-react';
+import { ArrowUpRight, PiggyBank, Plus, Target, Wallet } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -12,6 +13,7 @@ import type { Saving } from '../types';
 export function SavingsPage() {
   const { profile } = useProfileStore();
   const { viewMode } = useCoupleStore();
+  const navigate = useNavigate();
   const isCouple = viewMode === 'couple';
   const [plans, setPlans] = useState<Saving[]>([]);
   const [creating, setCreating] = useState(false);
@@ -25,6 +27,8 @@ export function SavingsPage() {
   }, [isCouple, profile]);
 
   const totalSaved = useMemo(() => plans.reduce((sum, plan) => sum + plan.current_amount, 0), [plans]);
+  const totalTarget = useMemo(() => plans.reduce((sum, plan) => sum + plan.target_amount, 0), [plans]);
+  const totalProgress = totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0;
 
   const savePlan = () => {
     if (!profile) return;
@@ -71,6 +75,7 @@ export function SavingsPage() {
           <div>
             <p className="text-sm font-bold opacity-80">Guardado</p>
             <p className="text-3xl font-black">{formatCurrency(totalSaved)}</p>
+            <p className="mt-1 text-xs font-bold opacity-75">{totalProgress}% del camino total</p>
           </div>
         </div>
       </section>
@@ -106,6 +111,18 @@ export function SavingsPage() {
               <p className="text-sm font-black text-gray-950 dark:text-white">{formatCurrency(plan.target_amount)}</p>
             </div>
             <ProgressBar value={plan.current_amount} max={plan.target_amount} size="sm" color="bg-[var(--theme-primary)]" showPercentage />
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <p className="text-xs font-bold text-gray-400">
+                Faltan {formatCurrency(Math.max(plan.target_amount - plan.current_amount, 0))}
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/expense?section=savings')}
+                className="inline-flex items-center gap-1 rounded-full bg-[var(--theme-primary-light)] px-3 py-1.5 text-xs font-black text-[var(--theme-primary)]"
+              >
+                Ahorrar <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </article>
         ))}
       </div>

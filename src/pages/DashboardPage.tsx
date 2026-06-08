@@ -1,18 +1,26 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Repeat2, User, Users, HeartHandshake, Percent } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Repeat2, User, Users, HeartHandshake, Percent, Cross, Gift } from 'lucide-react';
 import { useProfileStore, useFinanceStore, useCoupleStore, useUIStore } from '../store';
 import { formatCurrency } from '../lib/formatters';
 import { getBalance, getMovements, createMovement, completeFastOfferings } from '../services/movementService';
-import { getJointAccount, transferToJoint, transferToPartner } from '../services/jointAccountService';
+import { getJointAccount } from '../services/jointAccountService';
 import { useAppTheme } from '../hooks/useAppTheme';
+import { getThemeColor } from '../config/themes';
 import { getPendingTithes, payTithe as payTitheService, addManualTithe } from '../services/titheService';
+import { getSavings } from '../services/savingService';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
-import { Switch } from '../components/ui/Switch';
 import { supabase } from '../lib/supabase';
-import type { Movement, Tithe } from '../types';
+import type { Movement, Saving, Tithe } from '../types';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+
+
+function MovementIcon({ type, className = 'w-5 h-5' }: { type: string; className?: string }) {
+  if (type === 'income') return <ArrowDownToLine className={className} />;
+  if (type === 'transfer_to_joint') return <Repeat2 className={className} />;
+  return <ArrowUpFromLine className={className} />;
+}
 
 export function DashboardPage() {
   const { profile } = useProfileStore();
@@ -20,24 +28,23 @@ export function DashboardPage() {
   const {
     balance,
     jointBalance: cachedJointBalance,
+    jointAccountName: cachedJointAccountName,
+    jointAccountTheme: cachedJointAccountTheme,
     setBalance,
     setJointBalance: setCachedJointBalance,
+    setJointAccountMeta,
     setMovements,
     movements,
     setTitheBalance,
     titheBalance,
   } = useFinanceStore();
-  const { autoTithe, setAutoTithe } = useUIStore();
+  const { autoTithe } = useUIStore();
   const navigate = useNavigate();
   const appTheme = useAppTheme();
 
   const [jointBalance, setJointBalance] = useState(cachedJointBalance);
-  const [jointAccountName, setJointAccountName] = useState('Nuestra cuenta');
-  const [transferOpen, setTransferOpen] = useState(false);
-  const [transferTarget, setTransferTarget] = useState<'joint' | 'partner'>('joint');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferring, setTransferring] = useState(false);
-  const [transferError, setTransferError] = useState('');
+  const [jointAccountName, setJointAccountName] = useState(cachedJointAccountName);
+  const [jointTheme, setJointTheme] = useState(cachedJointAccountTheme);
 
   const [quickOpen, setQuickOpen] = useState<'income' | 'expense' | null>(null);
   const [quickAmount, setQuickAmount] = useState('');
@@ -72,9 +79,16 @@ export function DashboardPage() {
   const animationFrameRef = useRef<number | null>(null);
   const soundTimerRef = useRef<number | null>(null);
   const loadRequestRef = useRef(0);
+  const skipNextBalanceAnimationRef = useRef(false);
+  const latestVisibleBalanceRef = useRef<number | null>(null);
+  const latestActiveBalanceRef = useRef(0);
+  const latestActiveAccountKeyRef = useRef<'personal' | 'joint'>('personal');
+  const balancesReadyRef = useRef(false);
   const [balancesReady, setBalancesReady] = useState(false);
   const [displayedBalance, setDisplayedBalance] = useState<number | null>(null);
   const [quickActionPressed, setQuickActionPressed] = useState<'income' | 'transfer' | 'expense' | null>(null);
+  const [activityTab, setActivityTab] = useState<'movements' | 'savings'>('movements');
+  const [savingPlans, setSavingPlans] = useState<Saving[]>([]);
 
   const profileId = profile?.id;
   const profilePartnerId = profile?.partner_id;
@@ -89,6 +103,13 @@ export function DashboardPage() {
   const activeAccountBalance = isCoupleMode && isLinked ? jointBalance : balance;
   const activeAccountKey = isCoupleMode && isLinked ? 'joint' : 'personal';
   const visibleBalance = displayedBalance ?? activeAccountBalance;
+
+  useEffect(() => {
+    latestVisibleBalanceRef.current = displayedBalance;
+    latestActiveBalanceRef.current = activeAccountBalance;
+    latestActiveAccountKeyRef.current = activeAccountKey;
+    balancesReadyRef.current = balancesReady;
+  }, [activeAccountBalance, activeAccountKey, balancesReady, displayedBalance]);
 
   const goToMoneyPage = (path: '/income' | '/expense') => {
     sessionStorage.setItem('vasija:balance-start', String(activeAccountBalance));
@@ -157,6 +178,11 @@ export function DashboardPage() {
   useEffect(() => {
     if (!balancesReady) return;
 
+    if (skipNextBalanceAnimationRef.current) {
+      skipNextBalanceAnimationRef.current = false;
+      return;
+    }
+
     if (previousAccountKeyRef.current !== null && previousAccountKeyRef.current !== activeAccountKey) {
       previousAccountKeyRef.current = activeAccountKey;
       previousBalanceRef.current = activeAccountBalance;
@@ -200,17 +226,22 @@ export function DashboardPage() {
     };
   }, [activeAccountBalance, activeAccountKey, animateDisplayedBalance, balancesReady, displayedBalance]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { animateRealtime?: boolean }) => {
     if (!profileId) return;
     const requestId = loadRequestRef.current + 1;
     loadRequestRef.current = requestId;
     if (!hasFinanceSnapshot) setBalancesReady(false);
+    const realtimeStart = options?.animateRealtime
+      ? latestVisibleBalanceRef.current ?? latestActiveBalanceRef.current
+      : null;
+    const realtimeAccountKey = latestActiveAccountKeyRef.current;
 
-    const [bal, movs, jointAcc, pending, latestProfile] = await Promise.all([
+    const [bal, movs, jointAcc, pending, savings, latestProfile] = await Promise.all([
       getBalance(profileId),
       getMovements(profileId, isCoupleMode, profilePartnerId),
       isLinked ? getJointAccount(profileId) : Promise.resolve(null),
       getPendingTithes(profileId),
+      getSavings(profileId, isCoupleMode),
       supabase
         .from('profiles')
         .select('*')
@@ -221,16 +252,32 @@ export function DashboardPage() {
 
     if (requestId !== loadRequestRef.current) return;
 
+    const nextAccountKey = isCoupleMode && isLinked ? 'joint' : 'personal';
+    const nextActiveBalance = nextAccountKey === 'joint'
+      ? jointAcc?.balance ?? latestActiveBalanceRef.current
+      : bal;
+    const shouldAnimateRealtime =
+      !!options?.animateRealtime &&
+      balancesReadyRef.current &&
+      realtimeAccountKey === nextAccountKey &&
+      realtimeStart !== null &&
+      nextActiveBalance !== realtimeStart;
+
     setBalance(bal);
     setMovements(movs);
 
     if (jointAcc) {
       setJointBalance(jointAcc.balance);
       setCachedJointBalance(jointAcc.balance);
-      setJointAccountName(jointAcc.account_name || 'Nuestra cuenta');
+      const nextJointName = jointAcc.account_name || 'Nuestra cuenta';
+      const nextJointTheme = jointAcc.theme || 'purple';
+      setJointAccountName(nextJointName);
+      setJointTheme(nextJointTheme);
+      setJointAccountMeta({ id: jointAcc.id, name: nextJointName, theme: nextJointTheme });
     }
 
     setPendingTithes(pending);
+    setSavingPlans(savings);
     const totalTithe = pending.reduce((sum, t) => sum + t.amount, 0);
     setTitheBalance(totalTithe);
 
@@ -255,7 +302,18 @@ export function DashboardPage() {
       }
     }
     setBalancesReady(true);
-  }, [profileId, profilePartnerId, profilePartnerAlias, setBalance, setCachedJointBalance, setMovements, isLinked, isCoupleMode, setTitheBalance, setLinked, setPartner, resetCouple, hasFinanceSnapshot]);
+
+    if (shouldAnimateRealtime) {
+      const kind = nextActiveBalance > realtimeStart ? 'income' : 'expense';
+      skipNextBalanceAnimationRef.current = true;
+      previousAccountKeyRef.current = nextAccountKey;
+      previousBalanceRef.current = nextActiveBalance;
+      setDisplayedBalance(realtimeStart);
+      requestAnimationFrame(() => {
+        animateDisplayedBalance(realtimeStart, nextActiveBalance, kind);
+      });
+    }
+  }, [profileId, profilePartnerId, profilePartnerAlias, setBalance, setCachedJointBalance, setJointAccountMeta, setMovements, isLinked, isCoupleMode, setTitheBalance, setLinked, setPartner, resetCouple, hasFinanceSnapshot, animateDisplayedBalance]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -290,7 +348,7 @@ export function DashboardPage() {
           table: 'movements',
         },
         () => {
-          loadData();
+          loadData({ animateRealtime: true });
         }
       )
       .on(
@@ -301,7 +359,7 @@ export function DashboardPage() {
           table: 'joint_accounts',
         },
         () => {
-          loadData();
+          loadData({ animateRealtime: true });
         }
       )
       .subscribe();
@@ -312,6 +370,7 @@ export function DashboardPage() {
   }, [profile, profile?.partner_id, loadData, setPartner]);
 
   const recentMovements = movements.slice(0, 5);
+  const recentSavings = savingPlans.slice(0, 5);
 
   const formatMovementActor = (m: Movement) => {
     if (!profile) return m.description;
@@ -326,8 +385,8 @@ export function DashboardPage() {
     if (!partnerAlias) return m.description;
     if (m.type === 'transfer_to_joint') return `${partnerAlias} ha transferido`;
     if (m.type === 'income' && m.description.startsWith('Transferencia de')) return `${partnerAlias} ha transferido`;
-    if (m.type === 'income') return `${partnerAlias} ingresó dinero`;
-    if (m.type === 'expense') return `${partnerAlias} realizó un gasto`;
+    if (m.type === 'income') return `${partnerAlias} ingresÃ³ dinero`;
+    if (m.type === 'expense') return `${partnerAlias} realizÃ³ un gasto`;
     return `${partnerAlias}: ${m.description}`;
   };
 
@@ -340,8 +399,8 @@ export function DashboardPage() {
       if (quickOpen === 'income') {
         setConfirmModalConfig({
           title: "Confirmar Ingreso Compartido",
-          message: "¿Estás seguro de registrar este ingreso directamente en la cuenta compartida?",
-          warningText: "💡 Consejo financiero: La forma recomendada es registrar el ingreso en tu cuenta personal y luego realizar una transferencia a \"Nuestro dinero\" para mantener un historial de movimientos ordenado.",
+          message: "Â¿EstÃ¡s seguro de registrar este ingreso directamente en la cuenta compartida?",
+          warningText: "ðŸ’¡ Consejo financiero: La forma recomendada es registrar el ingreso en tu cuenta personal y luego realizar una transferencia a \"Nuestro dinero\" para mantener un historial de movimientos ordenado.",
           type: 'warning',
           onConfirm: () => handleQuickSubmit(true),
         });
@@ -349,7 +408,7 @@ export function DashboardPage() {
       } else {
         setConfirmModalConfig({
           title: "Confirmar Gasto Compartido",
-          message: "¿Estás seguro de registrar este gasto en la cuenta de la pareja?",
+          message: "Â¿EstÃ¡s seguro de registrar este gasto en la cuenta de la pareja?",
           type: 'info',
           onConfirm: () => handleQuickSubmit(true),
         });
@@ -374,26 +433,6 @@ export function DashboardPage() {
       loadData();
     }
     setQuickLoading(false);
-  };
-
-  const handleTransfer = async () => {
-    if (!profile) return;
-    const amount = parseFloat(transferAmount);
-    if (isNaN(amount) || amount <= 0) return;
-    setTransferring(true);
-    setTransferError('');
-    const result = transferTarget === 'joint'
-      ? await transferToJoint(profile.id, amount)
-      : await transferToPartner(profile.id, amount);
-    if (result.success) {
-      setTransferOpen(false);
-      setTransferAmount('');
-      setTransferTarget('joint');
-      loadData();
-    } else {
-      setTransferError(result.error || 'Error al transferir');
-    }
-    setTransferring(false);
   };
 
   const handlePayAllTithes = async () => {
@@ -451,7 +490,7 @@ export function DashboardPage() {
   const quickActionMotion = {
     initial: { scale: 1, opacity: 1, boxShadow: '0 8px 20px rgba(0,0,0,0.12)' },
     whileTap: { scale: 0.96, opacity: 0.98, boxShadow: '0 4px 12px rgba(0,0,0,0.14)' },
-    transition: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
+    transition: { type: 'spring', stiffness: 400, damping: 25 },
   } as const;
 
   return (
@@ -482,7 +521,7 @@ export function DashboardPage() {
             animate={quickActionPressed === 'transfer'
               ? { scale: [1, 0.96, 1], opacity: [1, 0.98, 1], boxShadow: ['0 8px 20px rgba(0,0,0,0.12)', '0 4px 12px rgba(0,0,0,0.14)', '0 8px 20px rgba(0,0,0,0.12)'] }
               : { scale: 1, opacity: 1, boxShadow: '0 8px 20px rgba(0,0,0,0.12)' }}
-            onClick={() => playQuickAction('transfer', () => setTransferOpen(true))}
+            onClick={() => playQuickAction('transfer', () => navigate('/transfer'))}
             className={`quick-action-button quick-action-button--transfer min-h-[118px] rounded-2xl border border-gray-200 bg-white px-2.5 py-4 dark:border-gray-800 dark:bg-gray-900 flex flex-col items-center justify-center gap-3 transition-colors hover:border-[var(--quick-color)] ${quickActionPressed === 'transfer' ? 'quick-action-button--pressed' : ''}`}
             aria-label="Transferir dinero"
           >
@@ -511,16 +550,26 @@ export function DashboardPage() {
       {/* Unified account card */}
       {(() => {
         const isJoint = isCoupleMode && isLinked;
+        const jointThemeColor = getThemeColor(jointTheme);
         const accName = isJoint ? jointAccountName : (profile?.account_name || 'Mi cuenta');
         return (
           <motion.div
             onClick={() => navigate(isJoint ? '/accounts?type=joint' : '/accounts?type=personal')}
             whileTap={{ scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             className="rounded-2xl p-6 text-white relative overflow-hidden cursor-pointer shadow-lg shadow-black/5 dark:shadow-black/30"
-            style={{ background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` }}
+            style={{ background: isJoint ? jointThemeColor.color : `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` }}
           >
-            <div className="absolute top-0 right-0 w-32 h-32 rounded-full -translate-y-1/2 translate-x-1/2 bg-white/15" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full translate-y-1/2 -translate-x-1/2 bg-white/10" />
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+              className="absolute top-0 right-0 w-32 h-32 rounded-full -translate-y-1/2 translate-x-1/2" style={{ backgroundColor: isJoint ? jointThemeColor.accentColor : 'rgba(255, 255, 255, 0.15)' }}
+            />
+            <motion.div
+              animate={{ y: [0, 6, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+              className="absolute bottom-0 left-0 w-24 h-24 rounded-full translate-y-1/2 -translate-x-1/2" style={{ backgroundColor: isJoint ? jointThemeColor.accentColor : 'rgba(255, 255, 255, 0.1)' }}
+            />
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-2 mb-2">
                 {isJoint ? <Users className="w-5 h-5 opacity-80" /> : <User className="w-5 h-5 opacity-80" />}
@@ -540,6 +589,125 @@ export function DashboardPage() {
         );
       })()}
 
+      {/* Tithe & Offerings inline under account card */}
+      {!isCoupleMode && (
+        <div className="grid grid-cols-2 gap-2">
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            onClick={() => navigate('/tithes')}
+            className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-left transition-colors hover:bg-white/60 dark:hover:bg-white/[0.04]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-primary-light)]">
+              <Cross className="h-4 w-4 text-[var(--theme-primary)]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold tracking-wider text-gray-400 dark:text-gray-500 uppercase">Diezmo</p>
+              <p className={`text-sm font-bold truncate ${displayTithe > 0 ? 'text-[var(--theme-primary)]' : 'text-gray-900 dark:text-white'}`}>
+                {balancesReady || hasFinanceSnapshot ? formatCurrency(displayTithe) : '...'}
+              </p>
+            </div>
+          </motion.button>
+
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            onClick={() => navigate('/tithes')}
+            className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-left transition-colors hover:bg-white/60 dark:hover:bg-white/[0.04]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-secondary-light)]">
+              <Gift className="h-4 w-4 text-[var(--theme-secondary)]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold tracking-wider text-gray-400 dark:text-gray-500 uppercase">Ofrendas</p>
+              <p className={`text-sm font-bold truncate ${fastOfferingBalance > 0 ? 'text-[var(--theme-secondary)]' : 'text-gray-900 dark:text-white'}`}>
+                {balancesReady || hasFinanceSnapshot ? formatCurrency(fastOfferingBalance) : '...'}
+              </p>
+            </div>
+          </motion.button>
+        </div>
+      )}
+
+      {/* Activity - full width */}
+      {(recentMovements.length > 0 || recentSavings.length > 0) && (
+        <div className="w-full rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-gray-900">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Actividad reciente</h3>
+            <div className="grid grid-cols-2 rounded-xl bg-gray-100 p-1 dark:bg-white/10">
+              {[
+                ['movements', 'Movimientos'],
+                ['savings', 'Ahorros'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setActivityTab(value as 'movements' | 'savings')}
+                  className={`rounded-lg px-2.5 py-1.5 text-[11px] font-black transition ${
+                    activityTab === value ? 'bg-white text-gray-950 shadow-sm dark:bg-[var(--theme-card-bg)] dark:text-white' : 'text-gray-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activityTab === 'movements' ? (
+            <div className="space-y-1">
+              {recentMovements.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setDetailMovement(m)}
+                  className="-mx-3 flex w-full items-center justify-between rounded-xl px-3 py-3 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+                      m.type === 'income' ? 'bg-green-100 text-green-600 dark:bg-green-900/30' :
+                      m.type === 'transfer_to_joint' ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' :
+                      'bg-red-100 text-red-600 dark:bg-red-900/30'
+                    }`}>
+                      <MovementIcon type={m.type} className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 text-left">
+                      <p className="truncate text-sm font-medium text-gray-900 dark:text-white">{formatMovementActor(m)}</p>
+                      <p className="text-xs text-gray-400">{new Date(m.date).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(m.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                  <p className={`ml-3 shrink-0 text-sm font-bold ${m.type === 'income' ? 'text-green-600' : m.type === 'transfer_to_joint' ? 'text-purple-600' : 'text-red-600'}`}>
+                    {m.type === 'income' ? '+' : '-'}{formatCurrency(m.amount)}
+                  </p>
+                </button>
+              ))}
+              <button onClick={() => navigate('/movements')} className="w-full py-2 text-center text-xs font-medium text-[var(--theme-primary)] hover:underline">
+                Ver todos los movimientos
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recentSavings.map((saving) => (
+                <button
+                  key={saving.id}
+                  type="button"
+                  onClick={() => navigate('/savings')}
+                  className="w-full rounded-2xl border border-gray-100 p-3 text-left transition hover:border-[var(--theme-primary)] dark:border-white/10"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-black text-gray-950 dark:text-white">{saving.name}</p>
+                    <p className="text-xs font-black text-[var(--theme-primary)]">{Math.min(100, Math.round((saving.current_amount / saving.target_amount) * 100))}%</p>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-white/10">
+                    <div className="h-full rounded-full bg-[var(--theme-primary)]" style={{ width: `${Math.min(100, (saving.current_amount / saving.target_amount) * 100)}%` }} />
+                  </div>
+                </button>
+              ))}
+              <button onClick={() => navigate('/savings')} className="w-full py-2 text-center text-xs font-medium text-[var(--theme-primary)] hover:underline">
+                Ver ahorros
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {!isLinked && (
         <button
           onClick={() => navigate('/couple')}
@@ -551,53 +719,50 @@ export function DashboardPage() {
             </div>
             <div>
               <p className="text-sm font-extrabold text-gray-950 dark:text-white">Conectar con mi pareja</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Crea o ingresa un código de conexión</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Crea o ingresa un cÃ³digo de conexiÃ³n</p>
             </div>
           </div>
         </button>
       )}
 
-      {/* Iglesia */}
+
+
+      {/* Tithe & Offerings inline under account card */}
       {!isCoupleMode && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            {/* Tithing */}
-            <motion.div
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setTitheModalOpen(true)}
-              className={`rounded-xl p-3 cursor-pointer border transition-all ${
-                titheBalance > 0
-                  ? 'bg-[var(--theme-primary-light)] border-[var(--theme-card-border)]'
-                  : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800'
-              }`}
-            >
-              <p className="text-[11px] font-semibold text-[var(--theme-primary)]">Diezmo</p>
-              <p className={`text-base font-bold mt-0.5 ${titheBalance > 0 ? 'text-[var(--theme-primary)]' : 'text-gray-900 dark:text-white'}`}>
-                {balancesReady || hasFinanceSnapshot ? formatCurrency(displayTithe) : 'Cargando...'}
+        <div className="grid grid-cols-2 gap-2">
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            onClick={() => navigate('/tithes')}
+            className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-left transition-colors hover:bg-white/60 dark:hover:bg-white/[0.04]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-primary-light)]">
+              <Cross className="h-4 w-4 text-[var(--theme-primary)]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold tracking-wider text-gray-400 dark:text-gray-500 uppercase">Diezmo</p>
+              <p className={`text-sm font-bold truncate ${displayTithe > 0 ? 'text-[var(--theme-primary)]' : 'text-gray-900 dark:text-white'}`}>
+                {balancesReady || hasFinanceSnapshot ? formatCurrency(displayTithe) : '...'}
               </p>
-            </motion.div>
+            </div>
+          </motion.button>
 
-            {/* Fast Offering */}
-            <motion.div
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setFastOfferingModalOpen(true)}
-              className={`rounded-xl p-3 cursor-pointer border transition-all ${
-                fastOfferingBalance > 0
-                  ? 'bg-[var(--theme-secondary-light)] border-[var(--theme-card-border)]'
-                  : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800'
-              }`}
-            >
-              <p className="text-[11px] font-semibold text-[var(--theme-secondary)]">Ofrendas</p>
-              <p className={`text-base font-bold mt-0.5 ${fastOfferingBalance > 0 ? 'text-[var(--theme-secondary)]' : 'text-gray-900 dark:text-white'}`}>
-                {balancesReady || hasFinanceSnapshot ? formatCurrency(fastOfferingBalance) : 'Cargando...'}
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            onClick={() => navigate('/tithes')}
+            className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-left transition-colors hover:bg-white/60 dark:hover:bg-white/[0.04]"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--theme-secondary-light)]">
+              <Gift className="h-4 w-4 text-[var(--theme-secondary)]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold tracking-wider text-gray-400 dark:text-gray-500 uppercase">Ofrendas</p>
+              <p className={`text-sm font-bold truncate ${fastOfferingBalance > 0 ? 'text-[var(--theme-secondary)]' : 'text-gray-900 dark:text-white'}`}>
+                {balancesReady || hasFinanceSnapshot ? formatCurrency(fastOfferingBalance) : '...'}
               </p>
-            </motion.div>
-          </div>
-
-          <div className="flex items-center justify-between px-1">
-            <p className="text-[11px] text-gray-500 dark:text-gray-400">Descuento automático (10%)</p>
-            <Switch checked={autoTithe} onChange={setAutoTithe} />
-          </div>
+            </div>
+          </motion.button>
         </div>
       )}
 
@@ -630,7 +795,7 @@ export function DashboardPage() {
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">Descripción</label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">DescripciÃ³n</label>
                 <input
                   value={quickDesc}
                   onChange={(e) => setQuickDesc(e.target.value)}
@@ -657,117 +822,6 @@ export function DashboardPage() {
         </div>
       )}
 
-      {/* Transfer modal */}
-      {transferOpen && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setTransferOpen(false)} />
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
-          >
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Transferir dinero</h3>
-            {transferError && (
-              <div className="mb-3 p-3 rounded-xl bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900">
-                <p className="text-sm text-red-600 dark:text-red-400">{transferError}</p>
-              </div>
-            )}
-            <p className="text-xs text-gray-400 mb-4">Saldo disponible: {formatCurrency(balance)}</p>
-            <div className="mb-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setTransferTarget('joint')}
-                className={`rounded-2xl border p-3 text-left transition ${
-                  transferTarget === 'joint'
-                    ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] text-[var(--theme-primary)]'
-                    : 'border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-200'
-                }`}
-              >
-                <p className="text-sm font-black">Cuenta comun</p>
-                <p className="mt-1 text-[11px] font-bold opacity-70">{jointAccountName}</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTransferTarget('partner')}
-                className={`rounded-2xl border p-3 text-left transition ${
-                  transferTarget === 'partner'
-                    ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] text-[var(--theme-primary)]'
-                    : 'border-gray-200 text-gray-700 dark:border-gray-800 dark:text-gray-200'
-                }`}
-              >
-                <p className="text-sm font-black">Mi pareja</p>
-                <p className="mt-1 text-[11px] font-bold opacity-70">{partnerAlias || 'Cuenta personal'}</p>
-              </button>
-            </div>
-            <div className="mb-4">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">Monto</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={transferAmount}
-                  onChange={(e) => setTransferAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                  className="w-full pl-8 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-lg font-bold focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="0.00"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => { setTransferOpen(false); setTransferTarget('joint'); }}>Cancelar</Button>
-              <Button className="flex-1" onClick={handleTransfer} loading={transferring} disabled={!transferAmount || parseFloat(transferAmount) <= 0 || parseFloat(transferAmount) > balance}>
-                <ArrowLeftRight className="w-4 h-4" /> Enviar
-              </Button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Recent movements */}
-      {recentMovements.length > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-200 dark:border-gray-800">
-          <h3 className="font-semibold text-gray-900 dark:text-white text-sm mb-4">
-            Últimos movimientos
-          </h3>
-          <div className="space-y-1">
-            {recentMovements.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setDetailMovement(m)}
-                className="w-full flex items-center justify-between py-3 px-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors -mx-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0 ${
-                    m.type === 'income' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' :
-                    m.type === 'transfer_to_joint' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600' :
-                    'bg-red-100 dark:bg-red-900/30 text-red-600'
-                  }`}>
-                    {m.type === 'income' ? '+' : m.type === 'transfer_to_joint' ? '↗' : '−'}
-                  </div>
-                  <div className="text-left min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{formatMovementActor(m)}</p>
-                    <p className="text-xs text-gray-400">{new Date(m.date).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(m.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}</p>
-                  </div>
-                </div>
-                <p className={`text-sm font-bold shrink-0 ml-3 ${
-                  m.type === 'income' ? 'text-green-600' :
-                  m.type === 'transfer_to_joint' ? 'text-purple-600' :
-                  'text-red-600'
-                }`}>
-                  {m.type === 'income' ? '+' : '-'}{formatCurrency(m.amount)}
-                </p>
-              </button>
-            ))}
-            <button
-              onClick={() => navigate('/movements')}
-              className="w-full text-center text-xs text-[var(--theme-primary)] font-medium py-2 hover:underline"
-            >
-              Ver todos los movimientos
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Movement detail modal */}
       {detailMovement && (
@@ -780,12 +834,12 @@ export function DashboardPage() {
           >
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg ${
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
                   detailMovement.type === 'income' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' :
                   detailMovement.type === 'transfer_to_joint' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-600' :
                   'bg-red-100 dark:bg-red-900/30 text-red-600'
                 }`}>
-                  {detailMovement.type === 'income' ? '+' : detailMovement.type === 'transfer_to_joint' ? '↗' : '−'}
+                  <MovementIcon type={detailMovement.type} className="w-6 h-6" />
                 </div>
                 <div>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">{formatMovementActor(detailMovement)}</p>
@@ -796,7 +850,7 @@ export function DashboardPage() {
                 onClick={() => setDetailMovement(null)}
                 className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500"
               >
-                ✕
+                âœ•
               </button>
             </div>
             <div className="space-y-4">
@@ -811,13 +865,13 @@ export function DashboardPage() {
                 </span>
               </div>
               <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
-                <span className="text-sm text-gray-500">Categoría</span>
+                <span className="text-sm text-gray-500">CategorÃ­a</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">{detailMovement.category}</span>
               </div>
               <div className="flex justify-between py-3 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-sm text-gray-500">Fecha</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {new Date(detailMovement.date).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })} — {new Date(detailMovement.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(detailMovement.date).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })} â€” {new Date(detailMovement.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
               <div className="flex justify-between py-3">
@@ -847,7 +901,7 @@ export function DashboardPage() {
           >
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
               <Percent className="w-5 h-5 text-amber-600" />
-              Gestión de Diezmo
+              GestiÃ³n de Diezmo
             </h3>
 
 
@@ -924,7 +978,7 @@ export function DashboardPage() {
           >
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
               <HeartHandshake className="w-5 h-5 text-blue-600" />
-              Gestión de Ofrenda de Ayuno
+              GestiÃ³n de Ofrenda de Ayuno
             </h3>
 
 
@@ -966,7 +1020,7 @@ export function DashboardPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-semibold text-gray-500 mb-1 block">Descripción</label>
+                    <label className="text-[10px] font-semibold text-gray-500 mb-1 block">DescripciÃ³n</label>
                     <input
                       value={fastOfferingDesc}
                       onChange={(e) => setFastOfferingDesc(e.target.value)}

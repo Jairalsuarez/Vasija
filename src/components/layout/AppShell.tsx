@@ -11,7 +11,7 @@ import { supabase } from '../../lib/supabase';
 export function AppShell() {
   const { profile } = useProfileStore();
   const { isLinked, viewMode } = useCoupleStore();
-  const { setBalance, setJointBalance, setMovements, setTitheBalance } = useFinanceStore();
+  const { setBalance, setJointBalance, setJointAccountMeta, setMovements, setTitheBalance } = useFinanceStore();
   const isCoupleMode = viewMode === 'couple';
 
   useEffect(() => {
@@ -29,7 +29,14 @@ export function AppShell() {
       if (cancelled) return;
       setBalance(balance);
       setMovements(movements);
-      if (jointAccount) setJointBalance(jointAccount.balance);
+      if (jointAccount) {
+        setJointBalance(jointAccount.balance);
+        setJointAccountMeta({
+          id: jointAccount.id,
+          name: jointAccount.account_name || 'Nuestra cuenta',
+          theme: jointAccount.theme || 'purple',
+        });
+      }
       setTitheBalance(pendingTithes.reduce((sum, tithe) => sum + tithe.amount, 0));
     };
 
@@ -67,7 +74,7 @@ export function AppShell() {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [profile?.id, profile?.partner_id, isLinked, isCoupleMode, setBalance, setJointBalance, setMovements, setTitheBalance]);
+  }, [profile?.id, profile?.partner_id, isLinked, isCoupleMode, setBalance, setJointBalance, setJointAccountMeta, setMovements, setTitheBalance]);
 
   return (
     <div className="min-h-screen bg-white text-gray-950 dark:bg-[var(--theme-bg)] dark:text-[var(--theme-text-primary)]">

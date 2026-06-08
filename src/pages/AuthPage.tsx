@@ -6,12 +6,15 @@ import { useProfileStore } from '../store';
 
 export function AuthPage() {
   const { hasUsedBefore } = useProfileStore();
-  const [splashDone, setSplashDone] = useState(false);
+
+  const skipSplash = sessionStorage.getItem('vasija:skip-auth-splash') === '1';
+  const [splashDone, setSplashDone] = useState(skipSplash);
   const [showRegister, setShowRegister] = useState(true);
 
   useEffect(() => {
+    if (skipSplash) sessionStorage.removeItem('vasija:skip-auth-splash');
     setShowRegister(!hasUsedBefore);
-  }, [hasUsedBefore]);
+  }, [hasUsedBefore, skipSplash]);
 
   if (!splashDone) {
     return <SplashScreen onFinish={() => setSplashDone(true)} />;

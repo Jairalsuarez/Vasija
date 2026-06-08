@@ -25,3 +25,22 @@ export async function createSaving(
 
   return data as Saving | null;
 }
+
+export async function contributeToSaving(
+  savingId: string,
+  amount: number,
+): Promise<boolean> {
+  const { data: current } = await supabase
+    .from('savings')
+    .select('current_amount')
+    .eq('id', savingId)
+    .single();
+
+  const nextAmount = Number(current?.current_amount || 0) + amount;
+  const { error } = await supabase
+    .from('savings')
+    .update({ current_amount: nextAmount })
+    .eq('id', savingId);
+
+  return !error;
+}

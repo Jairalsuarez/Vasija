@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Search, Filter, Plus } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, Filter, Plus, Repeat2, Search } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useFinanceStore, useProfileStore, useCoupleStore } from '../store';
 import { formatCurrency, formatDateShort } from '../lib/formatters';
@@ -19,16 +19,22 @@ const itemVariants = {
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: i * 0.04, duration: 0.35, ease },
+    transition: { delay: i * 0.04, duration: 0.25, ease },
   }),
 };
 
-const typeLabels: Record<string, { label: string; icon: string }> = {
-  income: { label: 'Ingreso', icon: '+' },
-  expense: { label: 'Gasto', icon: '−' },
-  tithe: { label: 'Diezmo', icon: '†' },
-  transfer_to_joint: { label: 'Transferencia', icon: '↗' },
+const typeLabels: Record<string, { label: string }> = {
+  income: { label: 'Ingreso' },
+  expense: { label: 'Gasto' },
+  tithe: { label: 'Diezmo' },
+  transfer_to_joint: { label: 'Transferencia' },
 };
+
+function MovementIcon({ type, className = 'w-5 h-5' }: { type: string; className?: string }) {
+  if (type === 'income') return <ArrowDownToLine className={className} />;
+  if (type === 'transfer_to_joint') return <Repeat2 className={className} />;
+  return <ArrowUpFromLine className={className} />;
+}
 
 export function MovementsPage() {
   const navigate = useNavigate();
@@ -171,7 +177,6 @@ export function MovementsPage() {
         ) : (
           filtered.map((m, i) => {
             const isPos = m.type === 'income';
-            const ctx = typeLabels[m.type] || { label: m.type, icon: '?' };
             let displayDesc = m.description;
             if (profile) {
               const isOwn = m.user_id === profile.id;
@@ -203,10 +208,10 @@ export function MovementsPage() {
                 className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-800 flex items-center justify-between active:scale-[0.99] transition-transform cursor-pointer hover:border-[var(--theme-primary)] dark:hover:border-[var(--theme-primary)]"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                     isPos ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)]' : 'bg-[var(--theme-secondary-light)] text-[var(--theme-secondary)]'
                   } ${m.type === 'transfer_to_joint' ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)]' : ''}`}>
-                    {ctx.icon}
+                    <MovementIcon type={m.type} className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{displayDesc}</p>
@@ -243,12 +248,12 @@ export function MovementsPage() {
           >
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg ${
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
                   detailMovement.type === 'income' ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)]' :
                   detailMovement.type === 'transfer_to_joint' ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)]' :
                   'bg-[var(--theme-secondary-light)] text-[var(--theme-secondary)]'
                 }`}>
-                  {detailMovement.type === 'income' ? '+' : detailMovement.type === 'transfer_to_joint' ? '↗' : '−'}
+                  <MovementIcon type={detailMovement.type} className="w-6 h-6" />
                 </div>
                 <div>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">

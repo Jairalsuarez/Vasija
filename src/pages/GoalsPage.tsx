@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Target, Plane, Heart, PiggyBank, Plus } from 'lucide-react';
+import { Sparkles, Target, Plane, Heart, PiggyBank, Plus } from 'lucide-react';
 import { useFinanceStore, useProfileStore, useCoupleStore } from '../store';
 import { formatCurrency } from '../lib/formatters';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -22,6 +22,9 @@ export function GoalsPage() {
   const [modalOpen, setModalOpen] = useState(false);
 
   const isCouple = viewMode === 'couple';
+  const totalGoal = goals.reduce((sum, goal) => sum + goal.target_amount, 0);
+  const totalCurrent = goals.reduce((sum, goal) => sum + goal.current_amount, 0);
+  const globalProgress = totalGoal > 0 ? Math.round((totalCurrent / totalGoal) * 100) : 0;
 
   const loadData = useCallback(async () => {
     if (!profile) return;
@@ -43,11 +46,29 @@ export function GoalsPage() {
       className="space-y-5"
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Metas</h2>
+        <div>
+          <h2 className="text-xl font-black text-gray-950 dark:text-white">Metas</h2>
+          <p className="text-xs font-bold text-gray-500 dark:text-gray-400">{isCouple ? 'Sueños en pareja' : 'Tus próximos logros'}</p>
+        </div>
         <Button size="sm" onClick={() => setModalOpen(true)}>
           <Plus className="w-4 h-4" /> Nueva meta
         </Button>
       </div>
+
+      {goals.length > 0 && (
+        <section className="rounded-3xl bg-gradient-to-br from-[var(--theme-primary)] to-[var(--theme-secondary)] p-5 text-white shadow-lg shadow-[var(--theme-primary)]/20">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide opacity-75">Avance general</p>
+              <p className="mt-1 text-4xl font-black">{globalProgress}%</p>
+              <p className="mt-1 text-xs font-bold opacity-80">{formatCurrency(totalCurrent)} de {formatCurrency(totalGoal)}</p>
+            </div>
+            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/18">
+              <Sparkles className="h-7 w-7" />
+            </span>
+          </div>
+        </section>
+      )}
 
       {goals.length === 0 ? (
         <div className="text-center py-16">
@@ -60,9 +81,11 @@ export function GoalsPage() {
           {goals.map((goal) => {
             const meta = categoryMeta[goal.category] || categoryMeta.other;
             const Icon = meta.icon;
-            const remaining = goal.target_amount - goal.current_amount;
+            const remaining = Math.max(goal.target_amount - goal.current_amount, 0);
+            const progress = goal.target_amount > 0 ? Math.min(100, Math.round((goal.current_amount / goal.target_amount) * 100)) : 0;
+            const status = progress >= 100 ? 'Meta cumplida' : progress >= 70 ? 'Ya falta poquito' : progress >= 35 ? 'Va tomando forma' : 'Primeros pasos';
             return (
-              <div key={goal.id} className="bg-white dark:bg-gray-900 rounded-xl p-5 border border-gray-200 dark:border-gray-800">
+              <motion.div key={goal.id} layout className="overflow-hidden rounded-3xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl ${meta.bg} flex items-center justify-center`}>
@@ -70,7 +93,7 @@ export function GoalsPage() {
                     </div>
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">{goal.name}</p>
-                      <p className="text-xs text-gray-400 capitalize">{goal.category === 'temple' ? 'Templo' : goal.category}</p>
+                      <p className="text-xs font-bold text-gray-400">{status}</p>
                     </div>
                   </div>
                   <p className="text-lg font-bold text-gray-900 dark:text-white">
@@ -84,8 +107,8 @@ export function GoalsPage() {
                   color={meta.barColor}
                 />
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-xs text-gray-400">
-                    Progreso: {formatCurrency(goal.current_amount)}
+                  <p className="text-xs font-bold text-gray-400">
+                    Faltan {formatCurrency(remaining)}
                   </p>
                   {remaining > 0 && (
                     <Button
@@ -97,7 +120,7 @@ export function GoalsPage() {
                     </Button>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>

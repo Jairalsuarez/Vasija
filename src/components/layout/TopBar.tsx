@@ -1,19 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion, useMotionValue, useTransform, type PanInfo } from 'framer-motion';
-import { Menu, Sun, Moon, User, Users, Heart, Bell, X, Info, CheckCircle2, AlertTriangle, WalletCards } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, BadgeDollarSign, Bell, BriefcaseBusiness, CheckCircle2, Church, Droplets, Edit3, HandCoins, Heart, Home, Info, Landmark, Menu, Moon, Palette, ReceiptText, Repeat2, Sun, Trash2, User, Users, Utensils, WalletCards, Wifi, Wrench, X, Zap, type LucideIcon } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useProfileStore, useUIStore, useCoupleStore } from '../../store';
 import { Switch } from '../ui/Switch';
+import { MinimalActionToast } from '../ui/MinimalActionToast';
 import { UserMenu } from './UserMenu';
 import { useAppTheme } from '../../hooks/useAppTheme';
-import { getNotifications, markNotificationRead, type AppNotification } from '../../services/notificationService';
+import { clearNotificationsByIds, getNotifications, markNotificationsRead, type AppNotification } from '../../services/notificationService';
 import { supabase } from '../../lib/supabase';
+import { formatCurrency } from '../../lib/formatters';
 
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Inicio',
   '/movements': 'Movimientos',
   '/debts': 'Deudas',
+  '/savings': 'Ahorros',
+  '/tithes': 'Diezmo',
   '/home': 'Hogar',
   '/goals': 'Metas',
   '/reports': 'Reportes',
@@ -24,20 +28,28 @@ const pageTitles: Record<string, string> = {
   '/about': 'Acerca de',
 };
 
+type NotificationVisual = {
+  icon: LucideIcon;
+  tone: 'default' | 'success' | 'warning' | 'info' | 'money';
+  label: string;
+  title: string;
+  detail: string;
+};
+
+type NotificationScope = 'personal' | 'couple';
+
 export function TopBar() {
   const [showCoupleNotice, setShowCoupleNotice] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [toastNotification, setToastNotification] = useState<AppNotification | null>(null);
-  const [browserPermission, setBrowserPermission] = useState<NotificationPermission>(
-    typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'denied',
-  );
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { profile } = useProfileStore();
   const { theme, setTheme, toggleSidebar, toggleUserMenu } = useUIStore();
   const { viewMode, toggleViewMode, isLinked, setViewMode } = useCoupleStore();
   const appTheme = useAppTheme();
+  const activeNotificationScope: NotificationScope = viewMode === 'couple' && isLinked ? 'couple' : 'personal';
 
   const playMoneySound = (kind: 'income' | 'expense') => {
     try {
@@ -65,9 +77,36 @@ export function TopBar() {
     }
   };
 
+  const playLoveSwitchSound = (enabled: boolean) => {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = new AudioContextCtor();
+      const now = ctx.currentTime;
+      const tones = enabled ? [523.25, 659.25, 783.99, 1046.5] : [783.99, 659.25];
+      tones.forEach((tone, index) => {
+        const offset = index * 0.045;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(tone, now + offset);
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(enabled ? 0.035 : 0.022, now + offset + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.2);
+      });
+      window.setTimeout(() => void ctx.close(), 520);
+    } catch {
+      // Browser may block audio without recent user gesture.
+    }
+  };
+
   useEffect(() => {
     if (!toastNotification) return;
-    const timer = window.setTimeout(() => setToastNotification(null), 5200);
+    const timer = window.setTimeout(() => setToastNotification(null), 3500);
     return () => window.clearTimeout(timer);
   }, [toastNotification]);
 
@@ -77,7 +116,7 @@ export function TopBar() {
 
     const loadNotifications = async () => {
       const data = await getNotifications(profile.id);
-      if (!cancelled) setNotifications(data);
+      if (!cancelled) setNotifications(filterNotificationsByScope(data, activeNotificationScope));
     };
 
     const showBrowserNotification = async (notification: AppNotification) => {
@@ -90,7 +129,6 @@ export function TopBar() {
         playMoneySound('expense');
       }
       if (!('Notification' in window)) return;
-      setBrowserPermission(Notification.permission);
       if (Notification.permission !== 'granted') return;
 
       try {
@@ -115,21 +153,27 @@ export function TopBar() {
       }
     };
 
-    loadNotifications();
+    void loadNotifications();
     const timer = window.setInterval(loadNotifications, 30000);
     const channel = supabase
       .channel(`app-notifications-${profile.id}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'app_notifications',
           filter: `user_id=eq.${profile.id}`,
         },
         (payload) => {
-          void showBrowserNotification(payload.new as AppNotification);
-          loadNotifications();
+          if (payload.eventType === 'INSERT') {
+            const incoming = payload.new as AppNotification;
+            const incomingScope = typeof incoming.metadata?.scope === 'string' ? incoming.metadata.scope : 'personal';
+            if ((activeNotificationScope === 'couple' && incomingScope === 'couple') || (activeNotificationScope === 'personal' && incomingScope !== 'couple')) {
+              void showBrowserNotification(incoming);
+            }
+          }
+          void loadNotifications();
         },
       )
       .subscribe();
@@ -139,7 +183,7 @@ export function TopBar() {
       window.clearInterval(timer);
       supabase.removeChannel(channel);
     };
-  }, [profile?.id]);
+  }, [activeNotificationScope, profile?.id]);
 
   const effectiveTheme =
     theme === 'system'
@@ -160,71 +204,115 @@ export function TopBar() {
       setShowCoupleNotice(true);
       return;
     }
+    playLoveSwitchSound(viewMode === 'personal');
     toggleViewMode();
   };
 
   const pageTitle = pathname.startsWith('/home/') ? 'Hogar' : pageTitles[pathname] || '';
   const unreadCount = notifications.filter((item) => !item.read_at).length;
+  const notificationTitle = activeNotificationScope === 'couple' ? 'Notificaciones en pareja' : 'Notificaciones personales';
 
   const openNotifications = async () => {
     const nextOpen = !notificationsOpen;
     setNotificationsOpen(nextOpen);
-    if (nextOpen && 'Notification' in window && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      setBrowserPermission(permission);
-    } else if ('Notification' in window) {
-      setBrowserPermission(Notification.permission);
-    }
-    if (nextOpen) {
-      const unread = notifications.filter((item) => !item.read_at);
-      await Promise.all(unread.map((item) => markNotificationRead(item.id)));
-      if (profile?.id) setNotifications(await getNotifications(profile.id));
+    if (nextOpen && profile?.id) {
+      const readAt = new Date().toISOString();
+      const ids = notifications.map((item) => item.id);
+      setNotifications((items) => items.map((item) => (item.read_at ? item : { ...item, read_at: readAt })));
+      await markNotificationsRead(ids);
+      const fresh = await getNotifications(profile.id);
+      setNotifications(filterNotificationsByScope(fresh, activeNotificationScope));
     }
   };
 
-  const testBrowserNotification = async () => {
-    const testNotification: AppNotification = {
-      id: 'test',
-      user_id: profile?.id || '',
-      title: 'Vasija',
-      body: 'Las notificaciones dentro de la app funcionan.',
-      type: 'info',
-      read_at: null,
-      metadata: {},
-      created_at: new Date().toISOString(),
-    };
-    setToastNotification(testNotification);
+  // Close notification panel on any outside click/tap
+  useEffect(() => {
+    if (!notificationsOpen) return;
 
-    if (!('Notification' in window)) return;
-    let permission = Notification.permission;
-    if (permission === 'default') {
-      permission = await Notification.requestPermission();
-    }
-    setBrowserPermission(permission);
-    if (permission === 'granted') {
-      try {
-        if ('serviceWorker' in navigator) {
-          const registration = await navigator.serviceWorker.register('/sw.js');
-          await registration.showNotification('Vasija', {
-            body: 'Las notificaciones del navegador funcionan.',
-            icon: '/contenido/LogoAPP.svg',
-            badge: '/contenido/LogoAPP.svg',
-            tag: 'vasija-test-notification',
-          });
-          return;
+    const timer = setTimeout(() => {
+      const handleOutside = (e: Event) => {
+        const target = e.target as Node;
+        const panel = document.querySelector('[data-notif-panel]');
+        const bell = document.querySelector('[data-notif-bell]');
+        if (panel && !panel.contains(target) && bell && !bell.contains(target)) {
+          setNotificationsOpen(false);
         }
+      };
+      document.addEventListener('click', handleOutside, true);
+      document.addEventListener('touchstart', handleOutside, true);
+    }, 150);
 
-        new Notification('Vasija', {
-          body: 'Las notificaciones del navegador funcionan.',
-          icon: '/contenido/LogoAPP.svg',
-          tag: 'vasija-test-notification',
-        });
-      } catch (error) {
-        console.warn('Test notification failed:', error);
-      }
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [notificationsOpen, setNotificationsOpen]);
+
+  const handleDeleteNotification = async (item: AppNotification) => {
+    if (!profile?.id) return;
+    const previous = notifications;
+    setNotifications((items) => items.filter((current) => current.id !== item.id));
+    const ok = await clearNotificationsByIds([item.id]);
+    if (!ok) {
+      setNotifications(previous);
+      setToastNotification({
+        id: `delete-error-${Date.now()}`,
+        user_id: profile.id,
+        title: 'No se pudo eliminar',
+        body: 'IntÃ©ntalo otra vez en unos segundos.',
+        type: 'warning',
+        read_at: new Date().toISOString(),
+        metadata: {},
+        created_at: new Date().toISOString(),
+      });
+      return;
+    }
+    if (activeNotificationScope === 'couple') {
+      setToastNotification({
+        id: `delete-${Date.now()}`,
+        user_id: profile.id,
+        title: 'NotificaciÃ³n eliminada',
+        body: 'La bandeja de pareja se actualizÃ³.',
+        type: 'success',
+        read_at: new Date().toISOString(),
+        metadata: { scope: 'couple' },
+        created_at: new Date().toISOString(),
+      });
     }
   };
 
+  const handleClearNotifications = async () => {
+    if (!profile?.id || notifications.length === 0) return;
+    const previous = notifications;
+    const ids = notifications.map((item) => item.id);
+    setNotifications([]);
+    const ok = await clearNotificationsByIds(ids);
+    if (!ok) {
+      setNotifications(previous);
+      setToastNotification({
+        id: `clear-error-${Date.now()}`,
+        user_id: profile.id,
+        title: 'No se pudieron limpiar',
+        body: 'IntÃ©ntalo otra vez en unos segundos.',
+        type: 'warning',
+        read_at: new Date().toISOString(),
+        metadata: {},
+        created_at: new Date().toISOString(),
+      });
+      return;
+    }
+    if (activeNotificationScope === 'couple') {
+      setToastNotification({
+        id: `clear-${Date.now()}`,
+        user_id: profile.id,
+        title: 'Notificaciones limpias',
+        body: 'La bandeja de pareja quedÃ³ al dÃ­a.',
+        type: 'success',
+        read_at: new Date().toISOString(),
+        metadata: { scope: 'couple' },
+        created_at: new Date().toISOString(),
+      });
+    }
+  };
   const resolveNotificationRoute = (item: AppNotification) => {
     const metadata = item.metadata || {};
     if (typeof metadata.route === 'string') return metadata.route;
@@ -333,63 +421,141 @@ export function TopBar() {
             </button>
 
             <div className="relative">
-              <button
+              <motion.button
+                data-notif-bell
                 onClick={openNotifications}
                 className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
                 aria-label="Notificaciones"
+                animate={notificationsOpen ? { scale: [1, 0.88, 1.08, 1] } : { scale: 1 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
               >
                 <Bell className="w-5 h-5 text-gray-600 dark:text-white" />
                 {unreadCount > 0 && (
-                  <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-pink-600 ring-2 ring-white dark:ring-gray-900" />
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [0, 1.2, 1] }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                    className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-pink-600 ring-2 ring-white dark:ring-gray-900"
+                  />
                 )}
-              </button>
+              </motion.button>
 
-              {notificationsOpen && (
-                <div className="absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-1.5rem)] rounded-2xl border border-gray-200 bg-white p-3 shadow-2xl dark:border-gray-800 dark:bg-gray-900">
-                  <p className="mb-2 text-sm font-extrabold text-gray-950 dark:text-white">Notificaciones</p>
-                  <div className="mb-3 flex items-center justify-between rounded-xl bg-gray-50 p-2 dark:bg-gray-950">
-                    <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400">
-                      Navegador: {browserPermission === 'granted' ? 'activas' : browserPermission === 'denied' ? 'bloqueadas' : 'sin permiso'}
-                    </p>
+              <AnimatePresence>
+                {notificationsOpen && (
+                <motion.div
+                  initial={{
+                    opacity: 0,
+                    scale: 0.02,
+                    x: 0,
+                    y: -46,
+                    borderRadius: 999,
+                    clipPath: 'circle(0px at calc(100% - 18px) -30px)',
+                    filter: 'blur(18px) saturate(1.3)',
+                  }}
+                  animate={{
+                    opacity: 1,
+                    scale: 1,
+                    x: 0,
+                    y: 0,
+                    borderRadius: 26,
+                    clipPath: 'circle(620px at calc(100% - 18px) -30px)',
+                    filter: 'blur(0px) saturate(1)',
+                  }}
+                  exit={{
+                    opacity: 0,
+                    scale: 0.02,
+                    x: 0,
+                    y: -46,
+                    borderRadius: 999,
+                    clipPath: 'circle(0px at calc(100% - 18px) -30px)',
+                    filter: 'blur(18px) saturate(1.35)',
+                  }}
+                  transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                  style={{ transformOrigin: 'calc(100% - 18px) -30px' }}
+                  data-notif-panel
+                  className="absolute right-0 top-12 z-50 w-[22rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-[26px] border border-white/70 bg-[color-mix(in_srgb,white_94%,var(--theme-primary)_6%)] p-2 shadow-[0_24px_70px_rgba(15,23,42,0.18)] backdrop-blur-2xl dark:border-white/10 dark:bg-[color-mix(in_srgb,#111827_90%,var(--theme-primary)_10%)]"
+                >
+                  <div className="absolute -right-16 -top-16 h-36 w-36 rounded-full bg-[var(--theme-primary)]/14 blur-3xl" />
+                  <div className="absolute -left-20 bottom-4 h-32 w-32 rounded-full bg-[var(--theme-secondary)]/12 blur-3xl" />
+                  <div className="relative mb-2 flex items-start justify-between gap-3 px-2 pt-2">
+                    <p className="text-sm font-black text-gray-950 dark:text-white">{notificationTitle}</p>
                     <button
                       type="button"
-                      onClick={testBrowserNotification}
-                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-extrabold text-white"
+                      onClick={handleClearNotifications}
+                      disabled={notifications.length === 0}
+                      className="grid h-9 w-9 place-items-center rounded-full bg-red-50 text-red-500 shadow-sm transition hover:bg-red-100 hover:text-red-600 active:scale-95 disabled:bg-white/60 disabled:text-gray-300 disabled:opacity-60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50 dark:disabled:bg-white/10 dark:disabled:text-white/25"
+                      aria-label="Limpiar notificaciones"
                     >
-                      Probar
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="max-h-80 space-y-2 overflow-y-auto">
+                  <div className={`relative space-y-2 overflow-y-auto p-1 pt-2 ${notifications.length === 0 ? 'max-h-24' : 'max-h-80'}`}>
                     {notifications.length === 0 ? (
-                      <p className="py-6 text-center text-sm font-semibold text-gray-400">Sin notificaciones</p>
+                      <div className="py-3 text-center">
+                        <p className="text-sm font-black text-gray-400 dark:text-white/45">Vacío</p>
+                      </div>
                     ) : (
-                      notifications.map((item) => {
-                        const canOpen = !!resolveNotificationRoute(item);
-                        return (
-                        <button
-                          type="button"
-                          key={item.id}
-                          onClick={() => handleNotificationClick(item)}
-                          className={`w-full rounded-xl border p-3 text-left transition-all ${
-                            item.type === 'warning'
-                              ? 'border-amber-100 bg-amber-50 dark:border-amber-950 dark:bg-amber-950/20'
-                              : 'border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-950'
-                          } ${canOpen ? 'active:scale-[0.99] hover:brightness-95' : ''}`}
-                        >
-                          <p className="text-sm font-extrabold text-gray-950 dark:text-white">{item.title}</p>
-                          <p className="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{item.body}</p>
-                          {typeof item.metadata?.scope === 'string' && (
-                            <p className="mt-2 text-[10px] font-extrabold uppercase tracking-wide text-gray-400">
-                              {item.metadata.scope === 'couple' ? 'Cuenta pareja' : 'Cuenta personal'}
-                            </p>
-                          )}
-                        </button>
-                        );
-                      })
+                      <AnimatePresence initial={false}>
+                        {notifications.map((item) => {
+                          const canOpen = !!resolveNotificationRoute(item);
+                          const visual = getNotificationVisual(item);
+                          const Icon = visual.icon;
+                          return (
+                            <motion.div
+                              key={item.id}
+                              layout
+                              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, x: 36, scale: 0.94, filter: 'blur(6px)' }}
+                              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleNotificationClick(item)}
+                                className={`group relative flex min-h-[68px] w-full items-center gap-3 overflow-hidden rounded-[22px] border border-white/70 bg-white/88 p-3 text-left shadow-sm transition-all dark:border-white/10 dark:bg-white/[0.06] ${
+                                  canOpen ? 'active:scale-[0.99] hover:-translate-y-0.5 hover:shadow-md' : ''
+                                }`}
+                              >
+                                <span
+                                  className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl text-white shadow-[0_10px_24px_color-mix(in_srgb,var(--theme-primary)_18%,transparent)]"
+                                  style={{ background: 'linear-gradient(135deg, var(--theme-primary), var(--theme-secondary))' }}
+                                >
+                                  <Icon className="h-[18px] w-[18px]" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="line-clamp-1 text-sm font-black text-gray-950 dark:text-white">{visual.title}</span>
+                                  <span className="mt-0.5 line-clamp-1 text-xs font-semibold leading-5 text-gray-500 dark:text-gray-400">{visual.detail}</span>
+                                </span>
+                                <span className="mr-8 shrink-0 text-[10px] font-bold text-gray-400">{formatNotificationTime(item.created_at)}</span>
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleDeleteNotification(item);
+                                  }}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void handleDeleteNotification(item);
+                                    }
+                                  }}
+                                  className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-gray-300 opacity-100 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30 sm:opacity-0 sm:group-hover:opacity-100"
+                                  aria-label="Eliminar notificación"
+                                >
+                                  <X className="h-4 w-4" />
+                                </span>
+                              </button>
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
                     )}
                   </div>
-                </div>
-              )}
+                </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <button onClick={toggleUserMenu} className="active:scale-95 transition-transform">
@@ -412,146 +578,221 @@ export function TopBar() {
         </div>
         <UserMenu />
       </header>
-      {notificationsOpen && (
-        <button
-          type="button"
-          className="fixed inset-0 z-[19] cursor-default"
-          aria-label="Cerrar notificaciones"
-          onClick={() => setNotificationsOpen(false)}
-        />
-      )}
       <AppToast notification={toastNotification} onDismiss={() => setToastNotification(null)} />
       {coupleNotice ? createPortal(coupleNotice, document.body) : null}
     </>
   );
 }
 
-type ToastTone = {
-  accent: string;
-  aura: string;
-  iconBg: string;
-  icon: typeof Info;
-  label: string;
-};
+function getNotificationVisual(notification: AppNotification): NotificationVisual {
+  const movementType = typeof notification.metadata?.type === 'string' ? notification.metadata.type : '';
+  const amount = typeof notification.metadata?.amount === 'number' ? notification.metadata.amount : Number(notification.metadata?.amount);
+  const amountLabel = Number.isFinite(amount) && amount > 0 ? formatCurrency(amount) : '';
+  const category = typeof notification.metadata?.category === 'string' ? notification.metadata.category : '';
+  const description = typeof notification.metadata?.description === 'string' ? notification.metadata.description : '';
+  const fromLabel = typeof notification.metadata?.from_label === 'string' ? notification.metadata.from_label : '';
+  const partnerAction = !!fromLabel && notification.metadata?.from_user_id !== notification.user_id;
+  const lowerTitle = notification.title.toLowerCase();
+  const lowerBody = notification.body.toLowerCase();
 
-function AppToast({ notification, onDismiss }: { notification: AppNotification | null; onDismiss: () => void }) {
-  const x = useMotionValue(0);
-  const rotate = useTransform(x, [-260, 0, 260], [-5, 0, 5]);
-  const opacity = useTransform(x, [-260, -150, 0, 150, 260], [0, 0.75, 1, 0.75, 0]);
-  const movementType = typeof notification?.metadata?.type === 'string' ? notification.metadata.type : '';
-  const tone = useMemo(() => getToastTone(notification, movementType), [notification, movementType]);
-  const Icon = tone.icon;
-
-  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (Math.abs(info.offset.x) > 120 || Math.abs(info.velocity.x) > 720) {
-      onDismiss();
-    }
-  };
-
-  return createPortal(
-    <div className="pointer-events-none fixed inset-x-3 bottom-4 z-[1200] flex justify-center sm:bottom-6">
-      <AnimatePresence>
-        {notification ? (
-          <motion.div
-            key={notification.id}
-            className="pointer-events-auto w-full max-w-[430px] touch-pan-y"
-            initial={{ y: 36, opacity: 0, scale: 0.94, filter: 'blur(8px)' }}
-            animate={{ y: 0, opacity: 1, scale: 1, filter: 'blur(0px)' }}
-            exit={{ y: 28, opacity: 0, scale: 0.96, filter: 'blur(8px)' }}
-            transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.8 }}
-            style={{ x, rotate, opacity }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.32}
-            onDragEnd={handleDragEnd}
-            role="status"
-            aria-live="polite"
-          >
-            <div className="relative overflow-hidden rounded-[24px] border border-slate-200/80 bg-slate-50/95 p-1 shadow-[0_22px_60px_rgba(15,23,42,0.20)] backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/90">
-              <div
-                className="absolute -right-10 -top-12 h-28 w-28 rounded-full blur-2xl"
-                style={{ background: tone.aura }}
-              />
-              <div className="relative flex items-start gap-3 rounded-[20px] bg-white/80 px-3.5 py-3 dark:bg-[var(--theme-card-bg)]/82">
-                <div className="relative mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white shadow-lg" style={{ background: tone.iconBg }}>
-                  <Icon className="h-5 w-5" />
-                  <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-[var(--theme-card-bg)]" style={{ background: tone.accent }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white" style={{ background: tone.accent }}>
-                      {tone.label}
-                    </span>
-                    <span className="h-px flex-1 bg-slate-200 dark:bg-white/10" />
-                  </div>
-                  <p className="line-clamp-1 text-sm font-black text-slate-950 dark:text-white">{notification.title}</p>
-                  <p className="mt-0.5 line-clamp-2 text-xs font-semibold leading-5 text-slate-500 dark:text-[var(--theme-text-secondary)]">
-                    {notification.body}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={onDismiss}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 active:scale-90 dark:hover:bg-white/10 dark:hover:text-white"
-                  aria-label="Quitar notificacion"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <motion.div
-                className="h-1 origin-left rounded-full"
-                style={{ background: tone.iconBg }}
-                initial={{ scaleX: 1 }}
-                animate={{ scaleX: 0 }}
-                transition={{ duration: 5.2, ease: 'linear' }}
-              />
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-    </div>,
-    document.body,
-  );
-}
-
-function getToastTone(notification: AppNotification | null, movementType: string): ToastTone {
-  const lowerTitle = notification?.title.toLowerCase() || '';
-
-  if (notification?.type === 'warning') {
+  if (typeof notification.metadata?.name_change_request_id === 'string' || lowerTitle.includes('nombre')) {
+    const accepted = lowerTitle.includes('acept');
+    const rejected = lowerTitle.includes('rechaz');
     return {
-      accent: '#d97706',
-      aura: 'rgba(245, 158, 11, 0.28)',
-      iconBg: 'linear-gradient(135deg, #f59e0b, #b45309)',
-      icon: AlertTriangle,
-      label: 'Aviso',
+      icon: Edit3,
+      tone: accepted ? 'success' : rejected ? 'warning' : 'info',
+      label: accepted ? 'Aceptado' : rejected ? 'Rechazado' : 'Nombre',
+      title: accepted ? 'Cambio de nombre aceptado' : rejected ? 'Cambio de nombre rechazado' : 'Solicitud de cambio de nombre',
+      detail: notification.body.replace(/^.+? quiere /i, 'Quiere '),
     };
   }
 
-  if (notification?.type === 'success' || movementType === 'income' || lowerTitle.includes('ingreso')) {
+  if (typeof notification.metadata?.theme_change_request_id === 'string' || lowerTitle.includes('color')) {
+    const accepted = lowerTitle.includes('acept');
+    const rejected = lowerTitle.includes('rechaz');
     return {
-      accent: '#059669',
-      aura: 'rgba(16, 185, 129, 0.24)',
-      iconBg: 'linear-gradient(135deg, #10b981, #047857)',
-      icon: CheckCircle2,
-      label: 'Listo',
+      icon: Palette,
+      tone: accepted ? 'success' : rejected ? 'warning' : 'info',
+      label: accepted ? 'Aceptado' : rejected ? 'Rechazado' : 'Color',
+      title: accepted ? 'Cambio de color aceptado' : rejected ? 'Cambio de color rechazado' : 'Solicitud de cambio de color',
+      detail: notification.body.replace(/^.+? quiere /i, 'Quiere '),
+    };
+  }
+
+  if (movementType === 'tithe' || textIncludesAny(category, ['diezmo']) || textIncludesAny(description, ['diezmo'])) {
+    return {
+      icon: Church,
+      tone: 'money',
+      label: 'Diezmo',
+      title: partnerAction ? `${fromLabel} pago diezmo` : 'Pago de diezmo',
+      detail: amountLabel || notification.body,
+    };
+  }
+
+  if (textIncludesAny(category, ['ofrenda']) || textIncludesAny(description, ['ofrenda'])) {
+    return {
+      icon: HandCoins,
+      tone: 'money',
+      label: 'Ofrenda',
+      title: partnerAction ? `${fromLabel} pago ofrenda` : 'Pago de ofrenda',
+      detail: amountLabel || notification.body,
+    };
+  }
+
+  if (typeof notification.metadata?.home_slug === 'string') {
+    return {
+      icon: Home,
+      tone: notification.type === 'warning' ? 'warning' : 'money',
+      label: 'Hogar',
+      title: notification.type === 'warning' ? 'Pago pendiente' : 'Pago registrado',
+      detail: notification.body,
+    };
+  }
+
+  if (movementType === 'transfer_to_joint' || lowerTitle.includes('transfer') || lowerBody.includes('transfer')) {
+    return {
+      icon: Repeat2,
+      tone: 'money',
+      label: 'Transferencia',
+      title: fromLabel ? `${fromLabel} transfirió` : 'Transferiste',
+      detail: amountLabel ? `${amountLabel}${category ? `, ${category}` : ''}` : notification.body,
+    };
+  }
+
+  if (movementType === 'income' || lowerTitle.includes('ingreso')) {
+    const income = getIncomeAction(category, description, partnerAction ? fromLabel : '');
+    return {
+      icon: income.icon,
+      tone: 'money',
+      label: 'Ingreso',
+      title: income.title,
+      detail: amountLabel || notification.body,
     };
   }
 
   if (movementType === 'expense' || lowerTitle.includes('gasto')) {
+    const expense = getExpenseAction(category, description, partnerAction ? fromLabel : '');
     return {
-      accent: '#e35695',
-      aura: 'rgba(227, 86, 149, 0.24)',
-      iconBg: 'linear-gradient(135deg, #e35695, #be185d)',
-      icon: WalletCards,
-      label: 'Movimiento',
+      icon: expense.icon,
+      tone: 'warning',
+      label: 'Gasto',
+      title: expense.title,
+      detail: amountLabel || notification.body,
     };
   }
 
-  return {
-    accent: '#0b59b3',
-    aura: 'rgba(11, 89, 179, 0.22)',
-    iconBg: 'linear-gradient(135deg, #0b59b3, #2563eb)',
-    icon: Info,
-    label: 'Nuevo',
-  };
+  if (notification.type === 'warning') {
+    return { icon: AlertTriangle, tone: 'warning', label: 'Aviso', title: notification.title, detail: notification.body };
+  }
+
+  if (notification.type === 'success') {
+    return { icon: CheckCircle2, tone: 'success', label: 'Listo', title: notification.title, detail: notification.body };
+  }
+
+  if (movementType || lowerTitle.includes('gasto') || lowerTitle.includes('ingreso') || lowerTitle.includes('movimiento') || lowerTitle.includes('transfer')) {
+    return { icon: WalletCards, tone: 'money', label: 'Actividad', title: notification.title, detail: notification.body };
+  }
+
+  if (notification.type === 'info') {
+    return { icon: Info, tone: 'info', label: 'Info', title: notification.title, detail: notification.body };
+  }
+
+  return { icon: Bell, tone: 'default', label: 'Nuevo', title: notification.title, detail: notification.body };
+}
+
+function getIncomeAction(category: string, description: string, actorLabel: string): Pick<NotificationVisual, 'icon' | 'title'> {
+  const text = normalizeNotificationText(`${category} ${description}`);
+  const subject = getNotificationSubject(description, category);
+  const owned = actorLabel.length === 0;
+
+  if (text.includes('salario')) {
+    return { icon: BadgeDollarSign, title: owned ? 'Ingresaste un salario' : `${actorLabel} ingreso un salario` };
+  }
+  if (text.includes('cachuelo')) {
+    return { icon: HandCoins, title: owned ? 'Ingresaste un cachuelo' : `${actorLabel} ingreso un cachuelo` };
+  }
+  if (text.includes('negocio')) {
+    return { icon: BriefcaseBusiness, title: owned ? 'Ingresaste de negocios' : `${actorLabel} ingreso de negocios` };
+  }
+  if (subject) {
+    return { icon: ArrowDownToLine, title: owned ? `Ingresaste de ${subject}` : `${actorLabel} ingreso de ${subject}` };
+  }
+
+  return { icon: ArrowDownToLine, title: owned ? 'Ingresaste dinero' : `${actorLabel} ingreso dinero` };
+}
+
+function getExpenseAction(category: string, description: string, actorLabel: string): Pick<NotificationVisual, 'icon' | 'title'> {
+  const text = normalizeNotificationText(`${category} ${description}`);
+  const subject = getNotificationSubject(description, category);
+  const owned = actorLabel.length === 0;
+  const action = (ownTitle: string, partnerTitle: string, icon: LucideIcon) => ({
+    icon,
+    title: owned ? ownTitle : `${actorLabel} ${partnerTitle}`,
+  });
+
+  if (text.includes('arriendo') || text.includes('alquiler')) return action('Pago de alquiler', 'pago alquiler', Home);
+  if (text.includes('comida')) return action('Gasto de comida', 'gasto en comida', Utensils);
+  if (text.includes('luz')) return action('Pago de luz', 'pago luz', Zap);
+  if (text.includes('agua')) return action('Pago de agua', 'pago agua', Droplets);
+  if (text.includes('internet')) return action('Pago de internet', 'pago internet', Wifi);
+  if (text.includes('mantenimiento')) return action('Pago de mantenimiento', 'pago mantenimiento', Wrench);
+  if (text.includes('deuda')) return action(subject ? `Pago de ${subject}` : 'Pago de deuda', subject ? `pago ${subject}` : 'pago deuda', ReceiptText);
+  if (text.includes('ahorro')) return action(subject ? `Aporte a ${subject}` : 'Aporte a ahorro', subject ? `aporto a ${subject}` : 'aporto a ahorro', Landmark);
+  if (text.includes('meta')) return action(subject ? `Aporte a ${subject}` : 'Aporte a meta', subject ? `aporto a ${subject}` : 'aporto a meta', BadgeDollarSign);
+  if (subject) return action(`Gasto de ${subject}`, `gasto en ${subject}`, ArrowUpFromLine);
+
+  return action('Hiciste un gasto', 'hizo un gasto', ArrowUpFromLine);
+}
+
+function getNotificationSubject(description: string, category: string) {
+  const raw = (description || category || '')
+    .split(':')
+    .pop()
+    ?.trim()
+    .toLowerCase() || '';
+  const subject = raw.replace(/\s+/g, ' ');
+  const generic = ['gasto', 'hogar', 'ingreso', 'general', 'otro ingreso', 'ingreso rapido'];
+  return subject && !generic.includes(subject) ? subject : '';
+}
+
+function textIncludesAny(value: string, terms: string[]) {
+  const normalized = normalizeNotificationText(value);
+  return terms.some((term) => normalized.includes(normalizeNotificationText(term)));
+}
+
+function normalizeNotificationText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function filterNotificationsByScope(items: AppNotification[], scope: NotificationScope) {
+  return items.filter((item) => {
+    const itemScope = typeof item.metadata?.scope === 'string' ? item.metadata.scope : 'personal';
+    return scope === 'couple' ? itemScope === 'couple' : itemScope !== 'couple';
+  });
+}
+
+function formatNotificationTime(dateValue: string) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+}
+
+function AppToast({ notification, onDismiss }: { notification: AppNotification | null; onDismiss: () => void }) {
+  const visual = notification ? getNotificationVisual(notification) : null;
+  const message = notification ? `${visual?.title || notification.title}${visual?.detail ? `, ${visual.detail}` : ''}` : '';
+  const isAccountNameToast = message.toLowerCase().includes('nombre') && message.toLowerCase().includes('actualiz');
+
+  return (
+    <MinimalActionToast
+      open={!!notification}
+      message={isAccountNameToast ? 'El nombre de tu cuenta fue actualizado' : message}
+      highlight={isAccountNameToast ? 'fue actualizado' : ''}
+      tone={visual?.tone || 'default'}
+      onDismiss={onDismiss}
+    />
+  );
 }

@@ -29,16 +29,33 @@ export async function registerTithe(
 
 export async function payTithe(
   titheId: string,
-  _userId: string,
-  _amount: number,
-  _isCouple: boolean = false,
+  userId: string,
+  amount: number,
+  isCouple: boolean = false,
 ): Promise<boolean> {
   const { error } = await supabase
     .from('tithes')
     .update({ is_paid: true, paid_at: new Date().toISOString() })
     .eq('id', titheId);
 
-  return !error;
+  if (error) return false;
+
+  await supabase.rpc('notify_user', {
+    p_user_id: userId,
+    p_title: 'Pago de diezmo',
+    p_body: `Pagaste un diezmo de ${amount}.`,
+    p_type: 'success',
+    p_metadata: {
+      scope: isCouple ? 'couple' : 'personal',
+      type: 'tithe',
+      amount,
+      category: 'Diezmo',
+      description: 'Diezmo',
+      route: '/dashboard',
+    },
+  });
+
+  return true;
 }
 
 export async function getPendingTithes(userId: string): Promise<Tithe[]> {

@@ -5,6 +5,8 @@ export interface ThemeConfig {
   bg: string;
   text: string;
   accent: string;
+  color?: string;
+  accentColor?: string;
 }
 
 export const JOINT_ACCOUNT_THEMES: ThemeConfig[] = [
@@ -22,6 +24,22 @@ export const JOINT_ACCOUNT_THEMES: ThemeConfig[] = [
 
 export function getTheme(id?: string): ThemeConfig {
   return JOINT_ACCOUNT_THEMES.find((t) => t.id === id) || JOINT_ACCOUNT_THEMES[0];
+}
+
+export function getThemeColor(id?: string): { color: string; accentColor: string } {
+  const colors: Record<string, { color: string; accentColor: string }> = {
+    purple: { color: '#9333ea', accentColor: 'rgba(192, 132, 252, 0.3)' },
+    pink: { color: '#db2777', accentColor: 'rgba(244, 114, 182, 0.3)' },
+    blue: { color: '#2563eb', accentColor: 'rgba(96, 165, 250, 0.3)' },
+    green: { color: '#16a34a', accentColor: 'rgba(74, 222, 128, 0.3)' },
+    orange: { color: '#ea580c', accentColor: 'rgba(251, 146, 60, 0.3)' },
+    teal: { color: '#0d9488', accentColor: 'rgba(45, 212, 191, 0.3)' },
+    red: { color: '#dc2626', accentColor: 'rgba(248, 113, 113, 0.3)' },
+    indigo: { color: '#4f46e5', accentColor: 'rgba(129, 140, 248, 0.3)' },
+    amber: { color: '#d97706', accentColor: 'rgba(251, 191, 36, 0.3)' },
+    emerald: { color: '#059669', accentColor: 'rgba(52, 211, 153, 0.3)' },
+  };
+  return colors[id || 'purple'] || colors.purple;
 }
 
 // App-wide theme presets — each defines the 3 core brand colors

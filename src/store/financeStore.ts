@@ -9,6 +9,9 @@ interface FinanceState {
   tithes: Tithe[];
   balance: number;
   jointBalance: number;
+  jointAccountId: string | null;
+  jointAccountName: string;
+  jointAccountTheme: string;
   titheBalance: number;
   setMovements: (movements: Movement[]) => void;
   addMovement: (movement: Movement) => void;
@@ -22,6 +25,7 @@ interface FinanceState {
   payTithe: (id: string) => void;
   setBalance: (balance: number) => void;
   setJointBalance: (balance: number) => void;
+  setJointAccountMeta: (meta: { id?: string | null; name?: string | null; theme?: string | null }) => void;
   setTitheBalance: (balance: number) => void;
   resetFinance: () => void;
 }
@@ -33,6 +37,9 @@ const initialFinanceState = {
   tithes: [],
   balance: 0,
   jointBalance: 0,
+  jointAccountId: null,
+  jointAccountName: 'Nuestra cuenta',
+  jointAccountTheme: 'purple',
   titheBalance: 0,
 };
 
@@ -64,6 +71,12 @@ export const useFinanceStore = create<FinanceState>()(
         })),
       setBalance: (balance) => set({ balance }),
       setJointBalance: (balance) => set({ jointBalance: balance }),
+      setJointAccountMeta: (meta) =>
+        set((state) => ({
+          jointAccountId: meta.id !== undefined ? meta.id : state.jointAccountId,
+          jointAccountName: meta.name || state.jointAccountName,
+          jointAccountTheme: meta.theme || state.jointAccountTheme,
+        })),
       setTitheBalance: (balance) => set({ titheBalance: balance }),
       resetFinance: () => set(initialFinanceState),
     }),
@@ -73,6 +86,9 @@ export const useFinanceStore = create<FinanceState>()(
         movements: state.movements,
         balance: state.balance,
         jointBalance: state.jointBalance,
+        jointAccountId: state.jointAccountId,
+        jointAccountName: state.jointAccountName,
+        jointAccountTheme: state.jointAccountTheme,
         titheBalance: state.titheBalance,
       }),
     },

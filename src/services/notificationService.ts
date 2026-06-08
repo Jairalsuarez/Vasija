@@ -30,3 +30,46 @@ export async function markNotificationRead(id: string): Promise<boolean> {
 
   return !error;
 }
+
+export async function markAllNotificationsRead(userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('app_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('read_at', null);
+
+  return !error;
+}
+
+export async function markNotificationsRead(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) return true;
+  const { error } = await supabase
+    .from('app_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .in('id', ids);
+
+  return !error;
+}
+
+export async function clearNotifications(userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('app_notifications')
+    .delete()
+    .eq('user_id', userId);
+
+  return !error;
+}
+
+export async function clearNotificationsByIds(ids: string[]): Promise<boolean> {
+  if (ids.length === 0) return true;
+  const { error } = await supabase.rpc('clear_notifications_by_ids', {
+    p_notification_ids: ids,
+  });
+
+  if (error) {
+    console.warn('Error clearing notifications:', error);
+    return false;
+  }
+
+  return true;
+}

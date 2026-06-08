@@ -10,6 +10,7 @@ import {
   BarChart3,
   Users,
   Settings,
+  Church,
   X,
 } from 'lucide-react';
 import { useCoupleStore, useUIStore } from '../../store';
@@ -19,6 +20,7 @@ const personalLinks = [
   { to: '/movements', icon: ArrowLeftRight, label: 'Movimientos' },
   { to: '/debts', icon: Wallet, label: 'Deudas' },
   { to: '/savings', icon: PiggyBank, label: 'Ahorros' },
+  { to: '/tithes', icon: Church, label: 'Diezmo' },
   { to: '/home', icon: Home, label: 'Hogar' },
   { to: '/goals', icon: Target, label: 'Metas' },
   { to: '/reports', icon: BarChart3, label: 'Reportes' },
@@ -31,6 +33,7 @@ const coupleLinks = [
   { to: '/movements', icon: ArrowLeftRight, label: 'Movimientos' },
   { to: '/debts', icon: Wallet, label: 'Deudas' },
   { to: '/savings', icon: PiggyBank, label: 'Ahorros' },
+  { to: '/tithes', icon: Church, label: 'Diezmo' },
   { to: '/home', icon: Home, label: 'Hogar' },
   { to: '/goals', icon: Target, label: 'Metas' },
   { to: '/reports', icon: BarChart3, label: 'Reportes' },

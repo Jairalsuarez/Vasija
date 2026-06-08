@@ -103,12 +103,17 @@ export function IncomePage() {
                 onClick={() => (active ? resetQuick() : setSource(item))}
                 className={`flex min-h-28 flex-col items-center justify-center rounded-3xl border p-4 text-center transition active:scale-[0.98] ${
                   active
-                    ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)]'
-                    : 'border-gray-200 bg-white dark:border-gray-800 dark:bg-[var(--theme-card-bg)]'
+                    ? 'border-[var(--theme-primary)] bg-[var(--theme-primary-light)] shadow-lg shadow-gray-900/5'
+                    : 'border-gray-200 bg-white hover:border-[var(--theme-primary)] hover:bg-[var(--theme-primary-light)] dark:border-gray-800 dark:bg-[var(--theme-card-bg)]'
                 }`}
               >
-                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--theme-primary-light)]">
-                  <Icon className="h-7 w-7 text-[var(--theme-primary)]" />
+                <span
+                  className={`mb-3 flex h-12 w-12 items-center justify-center rounded-2xl ${
+                    active ? 'text-white shadow-lg shadow-black/10' : 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)]'
+                  }`}
+                  style={active ? { background: 'linear-gradient(135deg, var(--theme-primary), var(--theme-secondary))' } : undefined}
+                >
+                  <Icon className="h-7 w-7" />
                 </span>
                 <p className="text-sm font-black text-gray-950 dark:text-white">{item.name}</p>
               </button>

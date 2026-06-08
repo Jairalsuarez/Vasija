@@ -93,9 +93,3 @@ export async function signOut(): Promise<{ error: string | null }> {
   const { error } = await supabase.auth.signOut({ scope: 'local' });
   return { error: error?.message ?? null };
 }
-
-export async function resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email);
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-}

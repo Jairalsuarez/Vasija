@@ -64,6 +64,21 @@ export async function completeFastOfferings(
   userId: string,
   isCouple: boolean,
 ): Promise<boolean> {
+  let pendingQuery = supabase
+    .from('movements')
+    .select('amount')
+    .eq('category', 'Ofrenda de Ayuno')
+    .eq('is_paid', false);
+
+  if (isCouple) {
+    pendingQuery = pendingQuery.eq('is_couple', true);
+  } else {
+    pendingQuery = pendingQuery.eq('user_id', userId).eq('is_couple', false);
+  }
+
+  const { data: pendingOfferings } = await pendingQuery;
+  const totalAmount = (pendingOfferings || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
   let query = supabase
     .from('movements')
     .update({ is_paid: true })
@@ -77,5 +92,24 @@ export async function completeFastOfferings(
   }
 
   const { error } = await query;
-  return !error;
+  if (error) return false;
+
+  if (totalAmount > 0) {
+    await supabase.rpc('notify_user', {
+      p_user_id: userId,
+      p_title: 'Pago de ofrenda',
+      p_body: `Pagaste ofrendas por ${totalAmount}.`,
+      p_type: 'success',
+      p_metadata: {
+        scope: isCouple ? 'couple' : 'personal',
+        type: 'offering',
+        amount: totalAmount,
+        category: 'Ofrenda de Ayuno',
+        description: 'Ofrenda de Ayuno',
+        route: '/dashboard',
+      },
+    });
+  }
+
+  return true;
 }

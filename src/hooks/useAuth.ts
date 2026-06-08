@@ -87,14 +87,11 @@ export function useAuth() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         logout();
         useCoupleStore.getState().resetCouple();
         useFinanceStore.getState().resetFinance();
-      }
-      if (session?.user) {
-        setAuthenticated(true);
       }
     });
 

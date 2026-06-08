@@ -1,7 +1,6 @@
 ﻿import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, ChevronLeft, Check, X } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, ChevronLeft, X } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { signUp } from '../services/authService';
@@ -129,9 +128,6 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState(false);
-  const { setProfile } = useProfileStore();
-  const navigate = useNavigate();
 
   const goNext = () => { setDir(1); setStep((s) => s + 1); };
   const goBack = () => { setDir(-1); setStep((s) => s - 1); };
@@ -152,9 +148,8 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
       return;
     }
     if (user) {
-      setProfile(user);
-      setDone(true);
-      setTimeout(() => navigate('/dashboard'), 1200);
+      useProfileStore.setState({ isEntering: true, profile: user, isAuthenticated: true });
+      sessionStorage.setItem('vasija:skip-auth-splash', '1');
     }
     setLoading(false);
   };
@@ -337,53 +332,13 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
     },
   ];
 
-  if (done) {
-    return (
-      <div className="auth-screen">
-        <div className="min-h-screen w-full flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="text-center"
-          >
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1, rotate: 360 }}
-              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-green-500/20"
-            >
-              <Check className="w-10 h-10 text-white" />
-            </motion.div>
-            <motion.img
-              src="/contenido/LogoAPP.svg"
-              alt="Vasija"
-              className="w-16 h-16 mx-auto mb-4 drop-shadow-sm"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-            />
-            <motion.p
-              className="text-2xl font-extrabold text-gray-900 dark:text-white"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, duration: 0.5 }}
-            >
-              ¡Bienvenido a Vasija!
-            </motion.p>
-          </motion.div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="auth-screen">
       <div className="w-full max-w-[440px] px-4 py-5 sm:px-0">
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
           className="w-full"
         >
           <div className="auth-card">
@@ -392,7 +347,7 @@ export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
               <motion.div
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.5 }}
+                transition={{ duration: 0.3 }}
                 className="mb-3 flex items-center justify-center"
               >
                 <img
