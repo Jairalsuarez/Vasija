@@ -391,21 +391,21 @@ export function TopBar() {
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 backdrop-blur-md dark:border-gray-800 dark:bg-[var(--theme-card-bg)]/95">
-        <div className="flex h-14 items-center justify-between px-3 sm:h-16 sm:px-4">
+      <header className="sticky top-0 z-20 border-b border-white/70 bg-[var(--app-surface)]/86 backdrop-blur-2xl dark:border-white/10 dark:bg-[var(--theme-bg)]/82">
+        <div className="flex h-16 items-center justify-between px-4 sm:px-5">
           <div className="flex items-center gap-3">
             <button
               onClick={toggleSidebar}
-              className="md:hidden p-2 -ml-2 rounded-xl hover:bg-gray-100 dark:text-white dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
+              className="md:hidden p-2 -ml-2 rounded-2xl bg-white/70 shadow-sm ring-1 ring-black/[0.04] hover:bg-white dark:bg-white/10 dark:text-white dark:ring-white/10 active:scale-95 transition-all"
             >
               <Menu className="w-5 h-5 text-gray-700 dark:text-white" />
             </button>
-            <h1 className="text-base font-bold text-gray-900 dark:text-white md:hidden line-clamp-1">
+            <h1 className="text-base font-black text-gray-950 dark:text-white md:hidden line-clamp-1">
               {pageTitle}
             </h1>
           </div>
 
-          <div className="flex items-center gap-1.5 md:gap-3">
+          <div className="flex items-center gap-1.5 md:gap-2">
             <Switch
               checked={viewMode === 'couple'}
               onChange={handleViewToggle}
@@ -415,7 +415,7 @@ export function TopBar() {
 
             <button
               onClick={cycleTheme}
-              className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
+              className="p-2 rounded-2xl bg-white/70 shadow-sm ring-1 ring-black/[0.04] hover:bg-white dark:bg-white/10 dark:ring-white/10 dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
             >
               <ThemeIcon className="w-5 h-5 text-gray-600 dark:text-white" />
             </button>
@@ -424,7 +424,7 @@ export function TopBar() {
               <motion.button
                 data-notif-bell
                 onClick={openNotifications}
-                className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
+                className="relative p-2 rounded-2xl bg-white/70 shadow-sm ring-1 ring-black/[0.04] hover:bg-white dark:bg-white/10 dark:ring-white/10 dark:hover:bg-[var(--theme-primary-light)] active:scale-95 transition-all"
                 aria-label="Notificaciones"
                 animate={notificationsOpen ? { scale: [1, 0.88, 1.08, 1] } : { scale: 1 }}
                 transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
@@ -563,11 +563,11 @@ export function TopBar() {
                 <img
                   src={profile.avatar_url}
                   alt={profile.name}
-                  className="w-9 h-9 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                  className="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm dark:border-white/10"
                 />
               ) : (
                 <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold text-sm"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-sm shadow-sm"
                   style={{ background: `linear-gradient(135deg, ${appTheme.primary}, ${appTheme.secondary})` }}
                 >
                   {profile?.name?.charAt(0).toUpperCase() || '?'}

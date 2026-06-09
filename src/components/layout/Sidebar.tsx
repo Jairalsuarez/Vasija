@@ -45,13 +45,16 @@ export function Sidebar() {
   const { viewMode } = useCoupleStore();
   const { sidebarOpen, closeSidebar } = useUIStore();
   const links = viewMode === 'couple' ? coupleLinks : personalLinks;
+  const bottomLinks = links.filter((link) =>
+    ['Inicio', 'Movimientos', 'Ahorros', 'Hogar', 'Ajustes'].includes(link.label),
+  );
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-800">
+      <div className="flex items-center justify-between p-5 border-b border-black/[0.04] dark:border-white/10">
         <div className="flex items-center gap-2.5">
           <img src="/contenido/LogoAPP.svg" alt="Vasija" className="w-8 h-8" />
-          <span className="text-xl font-bold text-gray-900 dark:text-white">
+          <span className="text-xl font-black text-gray-950 dark:text-white">
             Vasija
           </span>
         </div>
@@ -62,7 +65,7 @@ export function Sidebar() {
           <X className="w-5 h-5 text-gray-500 dark:text-white" />
         </button>
       </div>
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname === link.to;
@@ -71,10 +74,10 @@ export function Sidebar() {
               key={link.to}
               to={link.to}
               onClick={() => { if (window.innerWidth < 768) closeSidebar(); }}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+              className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
                 active
-                  ? 'bg-[var(--theme-primary-light)] text-[var(--theme-primary)] dark:bg-[var(--theme-primary-light)] dark:text-white'
-                  : 'text-gray-600 hover:bg-[var(--theme-hover)] dark:text-white/85 dark:hover:bg-[var(--theme-primary-light)] dark:hover:text-white'
+                  ? 'bg-white text-[var(--theme-primary)] shadow-sm ring-1 ring-black/[0.04] dark:bg-white/10 dark:text-white dark:ring-white/10'
+                  : 'text-gray-500 hover:bg-white/70 hover:text-gray-950 dark:text-white/65 dark:hover:bg-white/10 dark:hover:text-white'
               }`}
             >
               <Icon className="w-5 h-5 shrink-0" />
@@ -83,7 +86,7 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="p-4 border-t border-gray-200 dark:border-gray-800">
+      <div className="p-4 border-t border-black/[0.04] dark:border-white/10">
         <p className="text-xs text-gray-400">Vasija v1.0.0</p>
       </div>
     </div>
@@ -91,7 +94,7 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="hidden md:flex flex-col w-64 h-screen bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 fixed left-0 top-0 z-30">
+      <aside className="hidden md:flex flex-col w-64 h-screen bg-[color-mix(in_srgb,var(--app-surface)_78%,white_22%)] dark:bg-[var(--theme-card-bg)] border-r border-black/[0.04] dark:border-white/10 fixed left-0 top-0 z-30">
         {sidebarContent}
       </aside>
 
@@ -111,13 +114,35 @@ export function Sidebar() {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed left-0 top-0 bottom-0 z-50 w-72 bg-white dark:bg-gray-900 shadow-2xl md:hidden"
+              className="fixed left-0 top-0 bottom-0 z-50 w-72 bg-[var(--app-surface)] dark:bg-gray-900 shadow-2xl md:hidden"
             >
               {sidebarContent}
             </motion.aside>
           </>
         )}
       </AnimatePresence>
+
+      <nav className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-5 rounded-[28px] border border-white/70 bg-white/88 p-1.5 shadow-[0_18px_50px_rgba(15,23,42,0.14)] backdrop-blur-2xl dark:border-white/10 dark:bg-[var(--theme-card-bg)]/88 md:hidden">
+        {bottomLinks.map((link) => {
+          const Icon = link.icon;
+          const active = pathname === link.to;
+          return (
+            <Link
+              key={link.to}
+              to={link.to}
+              className={`flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-3xl text-[10px] font-black transition ${
+                active
+                  ? 'bg-[var(--theme-primary)] text-white shadow-[0_10px_22px_color-mix(in_srgb,var(--theme-primary)_24%,transparent)]'
+                  : 'text-gray-400 active:scale-95 dark:text-white/45'
+              }`}
+              aria-label={link.label}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="max-w-full truncate px-1">{link.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </>
   );
 }

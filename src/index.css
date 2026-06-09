@@ -40,21 +40,27 @@
 
 html {
   --vasija-blue: #0b59b3;
-  --vasija-blue-soft: rgba(11, 89, 179, 0.1);
+  --vasija-blue-soft: rgba(11, 89, 179, 0.08);
   --vasija-pink: #e35695;
-  --vasija-pink-soft: rgba(227, 86, 149, 0.12);
-  background-color: var(--theme-bg, #f8fafc);
-  transition: background-color 180ms ease, color 180ms ease;
+  --vasija-pink-soft: rgba(227, 86, 149, 0.1);
+  --app-surface: #f4f5f8;
+  background-color: var(--app-surface);
+  transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), color 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
   margin: 0;
   min-height: 100svh;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   color: var(--theme-text-primary, #0f172a);
-  background-color: var(--theme-bg, #f8fafc);
-  transition: background-color 180ms ease, color 180ms ease;
+  background-color: var(--app-surface);
+  transition: background-color 300ms cubic-bezier(0.4, 0, 0.2, 1), color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-x: hidden;
+}
+
+html.dark {
+  --app-surface: var(--theme-bg, #080c14);
 }
 
 button,
@@ -63,29 +69,32 @@ input,
 textarea,
 select {
   transition:
-    background-color 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Auth Screens */
 .auth-screen {
   min-height: 100svh;
   width: 100%;
   display: grid;
   place-items: center;
   overflow-x: hidden;
-  background: var(--theme-bg, #f8fafc);
+  background: var(--theme-bg, #f4f5f8);
+  position: relative;
 }
 
 .auth-card {
   width: 100%;
   border: 1px solid var(--theme-border, #e2e8f0);
-  border-radius: 28px;
+  border-radius: 32px;
   background: var(--theme-card-bg, #ffffff);
-  padding: clamp(1.35rem, 5vw, 2rem);
-  box-shadow: 0 24px 60px rgba(11, 89, 179, 0.08);
+  padding: clamp(1.5rem, 5vw, 2.5rem);
+  box-shadow: 0 32px 80px rgba(11, 89, 179, 0.06);
+  backdrop-filter: blur(20px);
 }
 
 .auth-card h1 {
@@ -94,7 +103,7 @@ select {
 
 .auth-card input:focus {
   border-color: var(--vasija-blue);
-  box-shadow: 0 0 0 2px rgba(11, 89, 179, 0.16);
+  box-shadow: 0 0 0 3px rgba(11, 89, 179, 0.12);
 }
 
 .auth-card button {
@@ -107,11 +116,11 @@ select {
 .auth-card button[style] {
   background: linear-gradient(135deg, var(--vasija-blue), var(--vasija-pink)) !important;
   color: #ffffff !important;
-  box-shadow: 0 14px 28px rgba(11, 89, 179, 0.12);
+  box-shadow: 0 16px 32px rgba(11, 89, 179, 0.15);
 }
 
 .dark .auth-card {
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.4);
 }
 
 .vasija-loader {
@@ -119,40 +128,74 @@ select {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2rem 1.5rem;
+  padding: 2.5rem 2rem;
 }
 
+/* Premium Card & Glassmorphism Design System */
+.premium-card {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 16px 48px -10px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(24px) saturate(110%);
+  border-radius: 30px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .premium-card {
+  background: rgba(var(--theme-card-bg-rgb, 23, 28, 47), 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.45);
+}
+
+.premium-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 60px -10px rgba(15, 23, 42, 0.08);
+}
+
+.dark .premium-card:hover {
+  box-shadow: 0 30px 70px -10px rgba(0, 0, 0, 0.55);
+}
+
+/* Revolut Action Buttons */
 .quick-action-button {
   --quick-color: #2563eb;
   --quick-bg: #eff6ff;
-  --quick-glow: rgba(37, 99, 235, 0.35);
+  --quick-glow: rgba(37, 99, 235, 0.25);
   position: relative;
   isolation: isolate;
   overflow: hidden;
   transform-origin: center;
   will-change: transform, opacity, box-shadow;
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.04);
+}
+
+.dark .quick-action-button {
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.3);
 }
 
 .quick-action-button--income {
   --quick-color: var(--theme-primary, #0b59b3);
-  --quick-bg: var(--theme-primary-light, rgba(11, 89, 179, 0.1));
-  --quick-glow: color-mix(in srgb, var(--theme-primary, #0b59b3) 34%, transparent);
+  --quick-bg: var(--theme-primary-light, rgba(11, 89, 179, 0.08));
+  --quick-glow: color-mix(in srgb, var(--theme-primary, #0b59b3) 25%, transparent);
 }
 
 .quick-action-button--transfer {
-  --quick-color: color-mix(in srgb, var(--theme-primary, #0b59b3) 58%, var(--theme-secondary, #e35695));
+  --quick-color: color-mix(in srgb, var(--theme-primary, #0b59b3) 50%, var(--theme-secondary, #e35695));
   --quick-bg: linear-gradient(
     135deg,
-    var(--theme-primary-light, rgba(11, 89, 179, 0.1)),
-    var(--theme-secondary-light, rgba(227, 86, 149, 0.12))
+    var(--theme-primary-light, rgba(11, 89, 179, 0.08)),
+    var(--theme-secondary-light, rgba(227, 86, 149, 0.1))
   );
-  --quick-glow: color-mix(in srgb, var(--theme-secondary, #e35695) 32%, transparent);
+  --quick-glow: color-mix(in srgb, var(--theme-secondary, #e35695) 25%, transparent);
 }
 
 .quick-action-button--expense {
-  --quick-color: #ef3b2d;
-  --quick-bg: #fff1f0;
-  --quick-glow: rgba(239, 59, 45, 0.35);
+  --quick-color: #ef4444;
+  --quick-bg: rgba(239, 68, 68, 0.08);
+  --quick-glow: rgba(239, 68, 68, 0.25);
 }
 
 .quick-action-button::after {
@@ -170,38 +213,29 @@ select {
 }
 
 .quick-action-button--pressed::after {
-  animation: quick-action-surface 180ms ease-out;
+  animation: quick-action-surface 220ms cubic-bezier(0.1, 0.8, 0.3, 1);
 }
 
 .quick-action-button__icon {
   position: relative;
   color: var(--quick-color);
   background: var(--quick-bg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--quick-color) 12%, transparent);
-  animation: quick-icon-breathe 4s ease-in-out infinite;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--quick-color) 8%, transparent);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.quick-action-button--pressed .quick-action-button__icon {
-  animation: quick-action-icon-nudge 180ms cubic-bezier(0.22, 1, 0.36, 1);
+.quick-action-button:hover .quick-action-button__icon {
+  transform: scale(1.06) rotate(3deg);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--quick-color) 16%, transparent), 0 8px 20px var(--quick-glow);
 }
 
 @keyframes quick-action-surface {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(18); }
-  45% { opacity: 0.2; transform: translate(-50%, -50%) scale(120); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(160); }
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+  35% { opacity: 0.35; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(180); }
 }
 
-@keyframes quick-action-icon-nudge {
-  0% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(1px) scale(0.96); }
-  100% { transform: translateY(0) scale(1); }
-}
-
-@keyframes quick-icon-breathe {
-  0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--quick-color) 12%, transparent); }
-  50% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--quick-color) 28%, transparent), 0 0 20px var(--quick-glow); }
-}
-
+/* Global Dark Mode Overrides mapping to App Theme variables */
 .dark .bg-white {
   background-color: var(--theme-card-bg) !important;
 }
@@ -255,6 +289,7 @@ select {
   border-color: var(--theme-border) !important;
 }
 
+/* Couple Mode Colors Override */
 html[data-view-mode="couple"] .text-green-600,
 html[data-view-mode="couple"] .text-green-700,
 html[data-view-mode="couple"] .dark\:text-green-300,
@@ -317,7 +352,7 @@ html[data-view-mode="couple"] .border-green-200,
 html[data-view-mode="couple"] .hover\:border-green-300:hover,
 html[data-view-mode="couple"] .dark\:border-green-900,
 html[data-view-mode="couple"] .dark\:border-green-950 {
-  border-color: color-mix(in srgb, var(--theme-primary) 28%, transparent) !important;
+  border-color: color-mix(in srgb, var(--theme-primary) 20%, transparent) !important;
 }
 
 html[data-view-mode="couple"] .border-red-100,
@@ -329,7 +364,7 @@ html[data-view-mode="couple"] .dark\:border-red-900,
 html[data-view-mode="couple"] .dark\:border-red-950,
 html[data-view-mode="couple"] .dark\:border-pink-900,
 html[data-view-mode="couple"] .dark\:border-pink-950 {
-  border-color: color-mix(in srgb, var(--theme-secondary) 30%, transparent) !important;
+  border-color: color-mix(in srgb, var(--theme-secondary) 20%, transparent) !important;
 }
 
 html[data-view-mode="couple"] .bg-gradient-to-r.from-blue-50.to-pink-50,
@@ -355,17 +390,28 @@ input, textarea, select {
   background-color: var(--theme-input-bg, #ffffff);
   border-color: var(--theme-input-border, #cbd5e1);
   color: var(--theme-text-primary, #0f172a);
+  border-radius: 14px;
 }
 input:focus, textarea:focus, select:focus {
   outline: none;
-  box-shadow: 0 0 0 2px var(--theme-input-focus-ring, rgba(124,58,237,0.25));
+  box-shadow: 0 0 0 3px var(--theme-input-focus-ring, rgba(124,58,237,0.15));
   border-color: var(--theme-primary, #7c3aed);
 }
 
 /* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background-color: var(--theme-border, #e2e8f0);
   border-radius: 999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Separators */
@@ -393,10 +439,54 @@ hr {
     place-items: center;
   }
   .auth-card {
-    border-radius: 22px;
+    border-radius: 28px;
     box-shadow: none;
   }
   .vasija-loader {
-    padding: 1.5rem 1rem;
+    padding: 2rem 1.25rem;
   }
+}
+
+/* Ambient Floating Blur Blobs (Orbs) */
+.orb-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.6;
+  filter: blur(120px);
+}
+.dark .orb-layer {
+  opacity: 0.35;
+  filter: blur(140px);
+}
+
+.orb {
+  position: absolute;
+  border-radius: 999px;
+  mix-blend-mode: plus-lighter;
+  will-change: transform;
+}
+
+/* Sleek Recharts Styling */
+.recharts-default-tooltip {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: blur(16px) !important;
+  padding: 12px 16px !important;
+}
+
+.dark .recharts-default-tooltip {
+  background-color: rgba(15, 22, 40, 0.9) !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.recharts-tooltip-item-name, .recharts-tooltip-item-value {
+  font-family: ui-rounded, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
 }

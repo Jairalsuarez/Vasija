@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowDownToLine, ArrowUpFromLine, Repeat2, User, Users, HeartHandshake, Percent, Cross, Gift } from 'lucide-react';
 import { useProfileStore, useFinanceStore, useCoupleStore, useUIStore } from '../store';
@@ -14,6 +14,7 @@ import { Button } from '../components/ui/Button';
 import { supabase } from '../lib/supabase';
 import type { Movement, Saving, Tithe } from '../types';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 
 function MovementIcon({ type, className = 'w-5 h-5' }: { type: string; className?: string }) {
@@ -94,6 +95,21 @@ export function DashboardPage() {
   const profilePartnerId = profile?.partner_id;
   const profilePartnerAlias = profile?.partner_alias;
   const hasFinanceSnapshot = movements.length > 0 || balance !== 0 || cachedJointBalance !== 0 || titheBalance !== 0;
+
+  const sparklineData = useMemo(() => {
+    if (movements.length === 0) return [];
+    const sorted = [...movements]
+      .filter((m) => isCoupleMode ? m.is_couple : !m.is_couple)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    let running = 0;
+    const points: { balance: number }[] = [];
+    sorted.forEach((m) => {
+      const change = m.type === 'income' ? m.amount : -m.amount;
+      running += change;
+      points.push({ balance: running });
+    });
+    return points.slice(-12);
+  }, [movements, isCoupleMode]);
 
   const fastOfferingBalance = movements
     .filter((m) => m.category === 'Ofrenda de Ayuno' && !m.is_paid)
@@ -570,6 +586,24 @@ export function DashboardPage() {
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
               className="absolute bottom-0 left-0 w-24 h-24 rounded-full translate-y-1/2 -translate-x-1/2" style={{ backgroundColor: isJoint ? jointThemeColor.accentColor : 'rgba(255, 255, 255, 0.1)' }}
             />
+            
+            {/* Balance Card Sparkline */}
+            {sparklineData.length > 1 && (
+              <div className="absolute bottom-0 left-0 right-0 h-14 opacity-25 z-0 overflow-hidden pointer-events-none">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={sparklineData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorSparkline" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity={0.4}/>
+                        <stop offset="100%" stopColor="#ffffff" stopOpacity={0.0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="balance" stroke="#ffffff" strokeWidth={1.5} fillOpacity={1} fill="url(#colorSparkline)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-2 mb-2">
                 {isJoint ? <Users className="w-5 h-5 opacity-80" /> : <User className="w-5 h-5 opacity-80" />}

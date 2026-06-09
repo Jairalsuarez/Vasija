@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { useCoupleStore, useFinanceStore, useProfileStore } from '../../store';
@@ -77,14 +78,64 @@ export function AppShell() {
   }, [profile?.id, profile?.partner_id, isLinked, isCoupleMode, setBalance, setJointBalance, setJointAccountMeta, setMovements, setTitheBalance]);
 
   return (
-    <div className="min-h-screen bg-white text-gray-950 dark:bg-[var(--theme-bg)] dark:text-[var(--theme-text-primary)]">
-      <Sidebar />
-      <div className="md:ml-64">
-        <TopBar />
-        <main className="w-full max-w-7xl mx-auto px-3 py-4 pb-24 sm:px-4 md:px-6 md:py-6">
-          <Outlet />
-        </main>
+    <div className="min-h-screen bg-[var(--app-surface)] text-gray-950 dark:bg-[var(--theme-bg)] dark:text-[var(--theme-text-primary)] relative overflow-x-hidden">
+      {/* Floating Ambient Background Orbs */}
+      <div className="orb-layer">
+        <motion.div
+          animate={{
+            x: [0, 80, -40, 0],
+            y: [0, -100, 60, 0],
+            scale: [1, 1.15, 0.9, 1],
+          }}
+          transition={{
+            duration: 25,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+          className="orb w-[300px] h-[300px] left-[10%] top-[20%]"
+          style={{ backgroundColor: 'var(--theme-primary-light, rgba(99, 102, 241, 0.12))' }}
+        />
+        <motion.div
+          animate={{
+            x: [0, -90, 50, 0],
+            y: [0, 80, -90, 0],
+            scale: [1, 0.85, 1.15, 1],
+          }}
+          transition={{
+            duration: 30,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: 2,
+          }}
+          className="orb w-[350px] h-[350px] right-[15%] bottom-[15%]"
+          style={{ backgroundColor: 'var(--theme-secondary-light, rgba(236, 72, 153, 0.12))' }}
+        />
+        <motion.div
+          animate={{
+            x: [0, 60, -80, 0],
+            y: [0, 110, -60, 0],
+          }}
+          transition={{
+            duration: 28,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: 4,
+          }}
+          className="orb w-[280px] h-[280px] left-[40%] bottom-[30%]"
+          style={{ backgroundColor: 'var(--theme-primary-light, rgba(59, 130, 246, 0.1))' }}
+        />
+      </div>
+
+      <div className="relative z-10">
+        <Sidebar />
+        <div className="md:ml-64">
+          <TopBar />
+          <main className="w-full max-w-5xl mx-auto px-4 py-5 pb-28 sm:px-5 md:px-8 md:py-8">
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   );
 }
+
